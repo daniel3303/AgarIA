@@ -17,6 +17,7 @@ public class NeuralNetwork
     private readonly double[] _biasH2 = new double[HiddenSize];
     private readonly double[,] _weightsH2O = new double[HiddenSize, OutputSize];
     private readonly double[] _biasO = new double[OutputSize];
+    private double[] _originalGenome;
 
     public double[] Forward(double[] input)
     {
@@ -50,37 +51,12 @@ public class NeuralNetwork
         return output;
     }
 
-    public double[] GetGenome()
-    {
-        var genome = new double[GenomeSize];
-        int idx = 0;
-
-        for (int i = 0; i < InputSize; i++)
-            for (int h = 0; h < HiddenSize; h++)
-                genome[idx++] = _weightsIH1[i, h];
-
-        for (int h = 0; h < HiddenSize; h++)
-            genome[idx++] = _biasH1[h];
-
-        for (int h1 = 0; h1 < HiddenSize; h1++)
-            for (int h2 = 0; h2 < HiddenSize; h2++)
-                genome[idx++] = _weightsH1H2[h1, h2];
-
-        for (int h = 0; h < HiddenSize; h++)
-            genome[idx++] = _biasH2[h];
-
-        for (int h = 0; h < HiddenSize; h++)
-            for (int o = 0; o < OutputSize; o++)
-                genome[idx++] = _weightsH2O[h, o];
-
-        for (int o = 0; o < OutputSize; o++)
-            genome[idx++] = _biasO[o];
-
-        return genome;
-    }
+    // Returns the original genome array reference for pool deduplication
+    public double[] GetGenome() => _originalGenome;
 
     public void SetGenome(double[] genome)
     {
+        _originalGenome = genome;
         int idx = 0;
 
         for (int i = 0; i < InputSize; i++)

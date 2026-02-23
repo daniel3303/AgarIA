@@ -49,6 +49,8 @@ public class GeneticAlgorithm
 
     public void ReportFitness(double[] genome, double fitness)
     {
+        if (double.IsNaN(fitness) || double.IsInfinity(fitness)) return;
+
         lock (_lock)
         {
             // Decay all existing fitnesses every 30s so legacy genomes lose dominance over time

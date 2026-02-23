@@ -20,7 +20,7 @@ public class AIPlayerController
     private readonly Dictionary<string, long> _lastShotTick = new();
     private readonly Dictionary<string, long> _spawnTick = new();
     private long _currentTick;
-    private DateTime _lastCheckpoint = DateTime.UtcNow;
+    private DateTime _lastCheckpoint = DateTime.UtcNow.AddSeconds(-15); // Offset from decay by 15s to avoid race
     private const int ShootCooldownTicks = 10;
     private const int CheckpointIntervalSeconds = 30;
     private const int ExplorationGridSize = 40; // 4000/40 = 100 cells per axis, 10000 total
@@ -163,9 +163,9 @@ public class AIPlayerController
             // Track exploration — record which grid cell the bot is in
             if (_visitedCells.TryGetValue(bot.Id, out var visited))
             {
-                var gridX = (int)(bot.X / ExplorationGridSize);
-                var gridY = (int)(bot.Y / ExplorationGridSize);
                 var cellsPerRow = (int)(GameConfig.MapSize / ExplorationGridSize);
+                var gridX = Math.Min((int)(bot.X / ExplorationGridSize), cellsPerRow - 1);
+                var gridY = Math.Min((int)(bot.Y / ExplorationGridSize), cellsPerRow - 1);
                 visited.Add(gridY * cellsPerRow + gridX);
             }
 
