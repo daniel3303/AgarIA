@@ -15,7 +15,6 @@ public class AIPlayerController
     private readonly ILogger<AIPlayerController> _logger;
     private readonly Random _random = new();
     private readonly Dictionary<string, NeuralNetwork> _brains = new();
-    private readonly Dictionary<string, double> _spawnMass = new();
     private readonly Dictionary<string, HashSet<int>> _visitedCells = new();
     private readonly Dictionary<string, long> _lastShotTick = new();
     private readonly Dictionary<string, long> _spawnTick = new();
@@ -107,7 +106,6 @@ public class AIPlayerController
             var brain = new NeuralNetwork();
             brain.SetGenome(_ga.GetGenome());
             _brains[id] = brain;
-            _spawnMass[id] = GameConfig.StartMass;
             _spawnTick[id] = _currentTick;
             _visitedCells[id] = new HashSet<int>();
         }
@@ -445,7 +443,6 @@ public class AIPlayerController
                 _ga.ReportFitness(brain.GetGenome(), ComputeFitness(id, score, playerMassEaten, killerMassShare));
                 _brains.Remove(id);
             }
-            _spawnMass.Remove(id);
             _spawnTick.Remove(id);
             _lastShotTick.Remove(id);
             _visitedCells.Remove(id);
