@@ -2,7 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgarIA.Core.Repositories\AgarIA.Core.Repositories.csproj" />
-    <ProjectReference Include="..\AgarIA.Core.AI\AgarIA.Core.AI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

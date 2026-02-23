@@ -1,4 +1,4 @@
-using AgarIA.Core.AI;
+using System.Diagnostics;
 using AgarIA.Core.Data.Models;
 using AgarIA.Core.Repositories;
 using Microsoft.AspNetCore.SignalR;
@@ -14,7 +14,7 @@ public class GameEngine : IHostedService, IDisposable
     private readonly FoodRepository _foodRepository;
     private readonly ProjectileRepository _projectileRepository;
     private readonly CollisionManager _collisionManager;
-    private readonly AIPlayerController _aiController;
+    private readonly IAIController _aiController;
     private readonly IHubContext<GameHub, IGameHub> _hubContext;
     private readonly ILogger<GameEngine> _logger;
     private readonly GameSettings _gameSettings;
@@ -27,6 +27,11 @@ public class GameEngine : IHostedService, IDisposable
     private volatile bool _resetRequested;
     private volatile bool _maxSpeed;
     private int _tickRunning;
+    private long _tpsCount;
+    private long _lastTpsMeasure = Stopwatch.GetTimestamp();
+    private volatile int _currentTps;
+    private readonly double[] _phaseTimesMs = new double[10];
+    private readonly string[] _phaseNames = ["MovePlayers", "MoveProjectiles", "RebuildGrids", "ProjCollisions", "FoodCollisions", "PlayerCollisions", "Merges", "DecayMass", "AITick", "Broadcast"];
     private long _resetIntervalTicks;
     private long _lastResetTick;
     private long _roundStartTick;
@@ -38,7 +43,7 @@ public class GameEngine : IHostedService, IDisposable
         FoodRepository foodRepository,
         ProjectileRepository projectileRepository,
         CollisionManager collisionManager,
-        AIPlayerController aiController,
+        IAIController aiController,
         IHubContext<GameHub, IGameHub> hubContext,
         ILogger<GameEngine> logger,
         GameSettings gameSettings,
@@ -55,6 +60,8 @@ public class GameEngine : IHostedService, IDisposable
         _gameSettings = gameSettings;
         _resetHandler = resetHandler;
     }
+
+    public int CurrentTps => _currentTps;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -84,6 +91,14 @@ public class GameEngine : IHostedService, IDisposable
         try
         {
             Interlocked.Increment(ref _gameState.CurrentTick);
+            _tpsCount++;
+            var now = Stopwatch.GetTimestamp();
+            if (Stopwatch.GetElapsedTime(_lastTpsMeasure, now).TotalSeconds >= 1.0)
+            {
+                _currentTps = (int)_tpsCount;
+                _tpsCount = 0;
+                _lastTpsMeasure = now;
+            }
 
             if (_resetRequested)
             {
@@ -91,16 +106,61 @@ public class GameEngine : IHostedService, IDisposable
                 PerformReset();
             }
 
+            long ts;
+
+            ts = Stopwatch.GetTimestamp();
             MovePlayers();
+            _phaseTimesMs[0] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            ts = Stopwatch.GetTimestamp();
             MoveProjectiles();
+            _phaseTimesMs[1] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            ts = Stopwatch.GetTimestamp();
+            _collisionManager.RebuildGrids();
+            _phaseTimesMs[2] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            ts = Stopwatch.GetTimestamp();
             HandleProjectileCollisions();
+            _phaseTimesMs[3] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            ts = Stopwatch.GetTimestamp();
             HandleFoodCollisions();
+            _phaseTimesMs[4] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            ts = Stopwatch.GetTimestamp();
             HandlePlayerCollisions();
+            _phaseTimesMs[5] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            ts = Stopwatch.GetTimestamp();
             HandleMerges();
+            _phaseTimesMs[6] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            ts = Stopwatch.GetTimestamp();
             DecayMass();
             SpawnFood();
+            _phaseTimesMs[7] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            ts = Stopwatch.GetTimestamp();
             var scoreTriggered = _aiController.Tick(_gameState.CurrentTick);
+            _phaseTimesMs[8] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            ts = Stopwatch.GetTimestamp();
             BroadcastGameState();
+            _phaseTimesMs[9] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            if (_tpsCount == 0)
+            {
+                var parts = new string[10];
+                for (int pi = 0; pi < 10; pi++)
+                {
+                    parts[pi] = $"{_phaseNames[pi]}={_phaseTimesMs[pi]:F1}ms";
+                    _phaseTimesMs[pi] = 0;
+                }
+                _logger.LogInformation("Tick breakdown (last 1s): {Breakdown}", string.Join(" | ", parts));
+                _logger.LogInformation("  AI detail: {AIBreakdown}", _aiController.GetTickBreakdown());
+            }
+
             if (_gameSettings.ResetType == ResetType.MaxScore && scoreTriggered)
                 _resetRequested = true;
             if (_gameSettings.ResetType == ResetType.MaxTime && _resetIntervalTicks > 0 && _gameState.CurrentTick - _lastResetTick >= _resetIntervalTicks)
@@ -255,58 +315,36 @@ public class GameEngine : IHostedService, IDisposable
 
     private void HandleProjectileCollisions()
     {
-        var projectiles = _projectileRepository.GetAlive().ToList();
-        var players = _playerRepository.GetAlive().ToList();
+        var hits = _collisionManager.CheckProjectileCollisions(_projectileRepository.GetAlive().ToList());
 
-        foreach (var proj in projectiles)
+        foreach (var (proj, target, sizeRatio) in hits)
         {
-            if (!proj.IsAlive) continue;
+            proj.IsAlive = false;
+            _projectileRepository.Remove(proj.Id);
 
-            // Check player collisions
-            foreach (var player in players)
+            // Damage target: always 1 mass
+            if (target.Mass > GameConfig.MinMass)
             {
-                var ownerId = player.OwnerId ?? player.Id;
-                if (ownerId == proj.OwnerId) continue;
-
-                var dx = proj.X - player.X;
-                var dy = proj.Y - player.Y;
-                var dist = Math.Sqrt(dx * dx + dy * dy);
-
-                if (dist < player.Radius)
-                {
-                    proj.IsAlive = false;
-                    _projectileRepository.Remove(proj.Id);
-
-                    // Damage target: always 1 mass
-                    var sizeRatio = player.Mass / Math.Max(1, proj.OwnerMassAtFire);
-                    if (player.Mass > GameConfig.MinMass)
-                    {
-                        player.Mass = Math.Max(GameConfig.MinMass, player.Mass - 1);
-                    }
-
-                    // Reward shooter: refund based on size ratio, must be at least 2x to gain extra
-                    var reward = Math.Min((int)Math.Floor(sizeRatio), 20);
-                    reward = Math.Max(reward, 1);
-                    {
-                        var shooter = _playerRepository.Get(proj.OwnerId);
-                        if (shooter != null && shooter.IsAlive)
-                        {
-                            shooter.Mass += reward;
-                        }
-                    }
-
-                    var food = new FoodItem
-                    {
-                        Id = _foodRepository.NextId(),
-                        X = proj.X,
-                        Y = proj.Y,
-                        ColorIndex = new Random().Next(6)
-                    };
-                    _foodRepository.Add(food);
-                    break;
-                }
+                target.Mass = Math.Max(GameConfig.MinMass, target.Mass - 1);
             }
 
+            // Reward shooter: refund based on size ratio, must be at least 2x to gain extra
+            var reward = Math.Min((int)Math.Floor(sizeRatio), 20);
+            reward = Math.Max(reward, 1);
+            var shooter = _playerRepository.Get(proj.OwnerId);
+            if (shooter != null && shooter.IsAlive)
+            {
+                shooter.Mass += reward;
+            }
+
+            var food = new FoodItem
+            {
+                Id = _foodRepository.NextId(),
+                X = proj.X,
+                Y = proj.Y,
+                ColorIndex = new Random().Next(6)
+            };
+            _foodRepository.Add(food);
         }
     }
 

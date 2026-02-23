@@ -1,3 +1,4 @@
+using AgarIA.Core.Game;
 using Equibles.Core.AutoWiring;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,6 +11,7 @@ public static class AIServiceCollectionExtensions
         services.AutoWireServicesFrom<AIAssembly>();
         services.AddSingleton<GeneticAlgorithm>();
         services.AddSingleton<AIPlayerController>();
+        services.AddSingleton<IAIController>(sp => sp.GetRequiredService<AIPlayerController>());
         return services;
     }
 }

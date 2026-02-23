@@ -83,7 +83,7 @@ app.Start();
 {
     var gameSettings = app.Services.GetRequiredService<GameSettings>();
     var gameEngine = app.Services.GetRequiredService<GameEngine>();
-    var aiController = app.Services.GetRequiredService<AIPlayerController>();
+    var aiController = app.Services.GetRequiredService<IAIController>();
     gameEngine.SetAutoResetSeconds(gameSettings.AutoResetSeconds);
     gameEngine.SetMaxSpeed(gameSettings.MaxSpeed);
     aiController.SetResetAtScore(gameSettings.ResetAtScore);

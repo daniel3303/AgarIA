@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using AgarIA.Core.Data.Models;
+using AgarIA.Core.Game;
 using AgarIA.Core.Repositories;
 using Equibles.Core.AutoWiring;
 using Microsoft.Extensions.Logging;
@@ -6,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace AgarIA.Core.AI;
 
 [Service]
-public class AIPlayerController
+public class AIPlayerController : IAIController
 {
     private readonly PlayerRepository _playerRepository;
     private readonly FoodRepository _foodRepository;
@@ -25,6 +27,13 @@ public class AIPlayerController
     private const int CheckpointIntervalSeconds = 30;
     private const int ExplorationGridSize = 40; // 4000/40 = 100 cells per axis, 10000 total
     private int _currentMaxAI = new Random().Next(10, 101);
+    private readonly SharedGrids _grids;
+    private double _aiFeatureMs;
+    private double _aiForwardMs;
+    private double _aiSetupMs;
+    private double _aiSeqMs;
+    private double _aiCleanupMs;
+    private double _aiMaintainMs;
 
     private static readonly string[] BotNames =
     {
@@ -56,6 +65,7 @@ public class AIPlayerController
         ProjectileRepository projectileRepository,
         GeneticAlgorithm ga,
         GameSettings gameSettings,
+        SharedGrids grids,
         ILogger<AIPlayerController> logger)
     {
         _playerRepository = playerRepository;
@@ -63,15 +73,29 @@ public class AIPlayerController
         _projectileRepository = projectileRepository;
         _ga = ga;
         _gameSettings = gameSettings;
+        _grids = grids;
         _logger = logger;
+    }
+
+    public string GetTickBreakdown()
+    {
+        var result = $"Cleanup={_aiCleanupMs:F1}ms | Maintain={_aiMaintainMs:F1}ms | Setup={_aiSetupMs:F1}ms | Features={_aiFeatureMs:F1}ms | Forward={_aiForwardMs:F1}ms | Seq={_aiSeqMs:F1}ms";
+        _aiSetupMs = _aiFeatureMs = _aiForwardMs = _aiSeqMs = _aiCleanupMs = _aiMaintainMs = 0;
+        return result;
     }
 
     public bool Tick(long currentTick)
     {
         _currentTick = currentTick;
+        var ts = Stopwatch.GetTimestamp();
         CleanupDeadBots();
         CheckpointLiveBots();
+        _aiCleanupMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+        ts = Stopwatch.GetTimestamp();
         MaintainBotCount();
+        _aiMaintainMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
         UpdateBots(currentTick);
         return CheckScoreThreshold();
     }
@@ -116,27 +140,59 @@ public class AIPlayerController
 
     private void UpdateBots(long currentTick)
     {
+        var ts = Stopwatch.GetTimestamp();
+
         var bots = _playerRepository.GetAll().Where(p => p.IsAI && p.IsAlive && p.OwnerId == null).ToList();
 
-        // Snapshot food/players once for all bots to avoid repeated enumeration
-        var allFood = _foodRepository.GetAll().ToList();
-        var allPlayers = _playerRepository.GetAlive().ToList();
+        // Use shared grids (rebuilt by CollisionManager earlier in tick)
+        var allPlayers = _grids.PlayerGrid.AllItems;
         var allProjectiles = _projectileRepository.GetAlive().ToList();
 
-        // Parallel phase: compute features + neural net forward pass
-        var decisions = new (Player bot, double[] output, double targetX, double targetY)[bots.Count];
+        // Pre-query nearby food per bot (single-threaded — grid query buffer not thread-safe)
+        var foodGrid = _grids.FoodGrid;
+        var nearbyFoodPerBot = new List<FoodItem>[bots.Count];
+        for (int i = 0; i < bots.Count; i++)
+        {
+            var bot = bots[i];
+            nearbyFoodPerBot[i] = new List<FoodItem>(foodGrid.Query(bot.X, bot.Y, 800));
+        }
+
+        _aiSetupMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+        // Phase 1: Build feature vectors in parallel
+        ts = Stopwatch.GetTimestamp();
+        const int featureSize = 119;
+        const int outputSize = 12;
+        var batchInputs = new double[bots.Count * featureSize];
+        var batchNetworks = new NeuralNetwork[bots.Count];
+        var botHasBrain = new bool[bots.Count];
 
         Parallel.For(0, bots.Count, i =>
         {
             var bot = bots[i];
-            if (!_brains.TryGetValue(bot.Id, out var brain))
-            {
-                decisions[i] = (bot, null, 0, 0);
-                return;
-            }
+            if (!_brains.TryGetValue(bot.Id, out var brain)) return;
 
-            var features = BuildFeatureVector(bot, allFood, allPlayers, allProjectiles);
-            var output = brain.Forward(features);
+            var features = BuildFeatureVector(bot, nearbyFoodPerBot[i], allPlayers, allProjectiles);
+            features.AsSpan().CopyTo(batchInputs.AsSpan(i * featureSize, featureSize));
+            batchNetworks[i] = brain;
+            botHasBrain[i] = true;
+        });
+        _aiFeatureMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+        // Phase 2: Batched forward pass
+        ts = Stopwatch.GetTimestamp();
+        var batchOutputs = new double[bots.Count * outputSize];
+        NeuralNetwork.BatchForward(batchInputs, batchNetworks, batchOutputs, bots.Count);
+        _aiForwardMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+        // Phase 3: Decode decisions
+        var decisions = new (Player bot, double[] output, double targetX, double targetY)[bots.Count];
+        for (int i = 0; i < bots.Count; i++)
+        {
+            if (!botHasBrain[i]) continue;
+            var bot = bots[i];
+            var output = new double[outputSize];
+            batchOutputs.AsSpan(i * outputSize, outputSize).CopyTo(output);
 
             int bestDir = 0;
             double bestVal = output[0];
@@ -154,8 +210,9 @@ public class AIPlayerController
             var targetY = bot.Y + Math.Sin(angle) * 200;
 
             decisions[i] = (bot, output, Math.Clamp(targetX, 0, GameConfig.MapSize), Math.Clamp(targetY, 0, GameConfig.MapSize));
-        });
+        }
 
+        ts = Stopwatch.GetTimestamp();
         // Sequential phase: apply decisions (mutations to shared state)
         foreach (var (bot, output, targetX, targetY) in decisions)
         {
@@ -213,6 +270,8 @@ public class AIPlayerController
                 }
             }
         }
+
+        _aiSeqMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
     }
 
     private void SplitBot(Player bot, long currentTick)
@@ -272,16 +331,19 @@ public class AIPlayerController
         features[idx++] = bot.Mass >= GameConfig.MinSplitMass ? 1.0 : 0.0;
 
         // Absolute position of two largest own cells normalized 0-1 (4)
-        var ownCells = new List<Player> { bot };
-        ownCells.AddRange(allPlayers.Where(p => p.OwnerId == bot.Id));
-        ownCells.Sort((a, b) => b.Mass.CompareTo(a.Mass));
-
-        features[idx++] = ownCells[0].X / GameConfig.MapSize;
-        features[idx++] = ownCells[0].Y / GameConfig.MapSize;
-        if (ownCells.Count > 1)
+        Player secondCell = null;
+        foreach (var p in allPlayers)
         {
-            features[idx++] = ownCells[1].X / GameConfig.MapSize;
-            features[idx++] = ownCells[1].Y / GameConfig.MapSize;
+            if (p.OwnerId == bot.Id && (secondCell == null || p.Mass > secondCell.Mass))
+                secondCell = p;
+        }
+
+        features[idx++] = bot.X / GameConfig.MapSize;
+        features[idx++] = bot.Y / GameConfig.MapSize;
+        if (secondCell != null)
+        {
+            features[idx++] = secondCell.X / GameConfig.MapSize;
+            features[idx++] = secondCell.Y / GameConfig.MapSize;
         }
         else
         {
@@ -289,23 +351,39 @@ public class AIPlayerController
             features[idx++] = 0;
         }
 
-        // 5 nearest food (10)
-        var foodDistances = new (double dx, double dy, double distSq)[allFood.Count];
+        // 5 nearest food (10) — partial selection instead of full sort
+        const int topFoodK = 5;
+        Span<(double dx, double dy, double distSq)> topFood = stackalloc (double, double, double)[topFoodK];
+        int topFoodCount = 0;
+
         for (int i = 0; i < allFood.Count; i++)
         {
             var dx = allFood[i].X - botX;
             var dy = allFood[i].Y - botY;
-            foodDistances[i] = (dx, dy, dx * dx + dy * dy);
-        }
-        Array.Sort(foodDistances, (a, b) => a.distSq.CompareTo(b.distSq));
+            var distSq = dx * dx + dy * dy;
 
-        var foodCount = Math.Min(5, foodDistances.Length);
-        for (int i = 0; i < 5; i++)
-        {
-            if (i < foodCount)
+            if (topFoodCount < topFoodK)
             {
-                features[idx++] = foodDistances[i].dx / GameConfig.MapSize;
-                features[idx++] = foodDistances[i].dy / GameConfig.MapSize;
+                topFood[topFoodCount++] = (dx, dy, distSq);
+                if (topFoodCount == topFoodK)
+                    SortSpan(ref topFood);
+            }
+            else if (distSq < topFood[topFoodK - 1].distSq)
+            {
+                topFood[topFoodK - 1] = (dx, dy, distSq);
+                InsertSorted(ref topFood, topFoodK);
+            }
+        }
+
+        if (topFoodCount < topFoodK)
+            SortSpan(ref topFood, topFoodCount);
+
+        for (int i = 0; i < topFoodK; i++)
+        {
+            if (i < topFoodCount)
+            {
+                features[idx++] = topFood[i].dx / GameConfig.MapSize;
+                features[idx++] = topFood[i].dy / GameConfig.MapSize;
             }
             else
             {
@@ -313,25 +391,46 @@ public class AIPlayerController
             }
         }
 
-        // 30 nearest players (90)
-        var playerDistances = new List<(double dx, double dy, double distSq, double mass)>();
+        // 30 nearest players (90) — partial selection instead of full sort
+        const int topPlayerK = 30;
+        var topPlayers = new (double dx, double dy, double distSq, double mass)[topPlayerK];
+        int topPlayerCount = 0;
+        Player largest = null;
+
         foreach (var p in allPlayers)
         {
             if (p.Id == bot.Id || p.OwnerId == bot.Id) continue;
+
+            if (largest == null || p.Mass > largest.Mass)
+                largest = p;
+
             var dx = p.X - botX;
             var dy = p.Y - botY;
-            playerDistances.Add((dx, dy, dx * dx + dy * dy, p.Mass));
-        }
-        playerDistances.Sort((a, b) => a.distSq.CompareTo(b.distSq));
+            var distSq = dx * dx + dy * dy;
 
-        var playerCount = Math.Min(30, playerDistances.Count);
-        for (int i = 0; i < 30; i++)
-        {
-            if (i < playerCount)
+            if (topPlayerCount < topPlayerK)
             {
-                features[idx++] = playerDistances[i].dx / GameConfig.MapSize;
-                features[idx++] = playerDistances[i].dy / GameConfig.MapSize;
-                features[idx++] = playerDistances[i].mass / (bot.Mass + playerDistances[i].mass);
+                topPlayers[topPlayerCount++] = (dx, dy, distSq, p.Mass);
+                if (topPlayerCount == topPlayerK)
+                    Array.Sort(topPlayers, (a, b) => a.distSq.CompareTo(b.distSq));
+            }
+            else if (distSq < topPlayers[topPlayerK - 1].distSq)
+            {
+                topPlayers[topPlayerK - 1] = (dx, dy, distSq, p.Mass);
+                InsertSortedPlayers(topPlayers, topPlayerK);
+            }
+        }
+
+        if (topPlayerCount < topPlayerK)
+            Array.Sort(topPlayers, 0, topPlayerCount, Comparer<(double dx, double dy, double distSq, double mass)>.Create((a, b) => a.distSq.CompareTo(b.distSq)));
+
+        for (int i = 0; i < topPlayerK; i++)
+        {
+            if (i < topPlayerCount)
+            {
+                features[idx++] = topPlayers[i].dx / GameConfig.MapSize;
+                features[idx++] = topPlayers[i].dy / GameConfig.MapSize;
+                features[idx++] = topPlayers[i].mass / (bot.Mass + topPlayers[i].mass);
             }
             else
             {
@@ -340,13 +439,6 @@ public class AIPlayerController
         }
 
         // Largest player position + relative mass (3)
-        Player largest = null;
-        foreach (var p in allPlayers)
-        {
-            if (p.Id == bot.Id || p.OwnerId == bot.Id) continue;
-            if (largest == null || p.Mass > largest.Mass)
-                largest = p;
-        }
         if (largest != null)
         {
             features[idx++] = (largest.X - botX) / GameConfig.MapSize;
@@ -358,24 +450,40 @@ public class AIPlayerController
             idx += 3;
         }
 
-        // 5 nearest projectiles (10)
-        var projDistances = new List<(double dx, double dy, double distSq)>();
+        // 5 nearest projectiles (10) — partial selection
+        const int topProjK = 5;
+        Span<(double dx, double dy, double distSq)> topProj = stackalloc (double, double, double)[topProjK];
+        int topProjCount = 0;
+
         foreach (var p in allProjectiles)
         {
             if (p.OwnerId == bot.Id) continue;
             var dx = p.X - botX;
             var dy = p.Y - botY;
-            projDistances.Add((dx, dy, dx * dx + dy * dy));
-        }
-        projDistances.Sort((a, b) => a.distSq.CompareTo(b.distSq));
+            var distSq = dx * dx + dy * dy;
 
-        var projCount = Math.Min(5, projDistances.Count);
-        for (int i = 0; i < 5; i++)
-        {
-            if (i < projCount)
+            if (topProjCount < topProjK)
             {
-                features[idx++] = projDistances[i].dx / GameConfig.MapSize;
-                features[idx++] = projDistances[i].dy / GameConfig.MapSize;
+                topProj[topProjCount++] = (dx, dy, distSq);
+                if (topProjCount == topProjK)
+                    SortSpan(ref topProj);
+            }
+            else if (distSq < topProj[topProjK - 1].distSq)
+            {
+                topProj[topProjK - 1] = (dx, dy, distSq);
+                InsertSorted(ref topProj, topProjK);
+            }
+        }
+
+        if (topProjCount < topProjK)
+            SortSpan(ref topProj, topProjCount);
+
+        for (int i = 0; i < topProjK; i++)
+        {
+            if (i < topProjCount)
+            {
+                features[idx++] = topProj[i].dx / GameConfig.MapSize;
+                features[idx++] = topProj[i].dy / GameConfig.MapSize;
             }
             else
             {
@@ -384,6 +492,46 @@ public class AIPlayerController
         }
 
         return features;
+    }
+
+    private static void SortSpan(ref Span<(double dx, double dy, double distSq)> span, int count = -1)
+    {
+        var len = count < 0 ? span.Length : count;
+        for (int i = 1; i < len; i++)
+        {
+            var key = span[i];
+            int j = i - 1;
+            while (j >= 0 && span[j].distSq > key.distSq)
+            {
+                span[j + 1] = span[j];
+                j--;
+            }
+            span[j + 1] = key;
+        }
+    }
+
+    private static void InsertSorted(ref Span<(double dx, double dy, double distSq)> span, int len)
+    {
+        for (int i = len - 1; i > 0; i--)
+        {
+            if (span[i].distSq < span[i - 1].distSq)
+            {
+                (span[i], span[i - 1]) = (span[i - 1], span[i]);
+            }
+            else break;
+        }
+    }
+
+    private static void InsertSortedPlayers((double dx, double dy, double distSq, double mass)[] arr, int len)
+    {
+        for (int i = len - 1; i > 0; i--)
+        {
+            if (arr[i].distSq < arr[i - 1].distSq)
+            {
+                (arr[i], arr[i - 1]) = (arr[i - 1], arr[i]);
+            }
+            else break;
+        }
     }
 
     private double ComputeFitness(string botId, double score, double playerMassEaten, double killerMassShare = 0)

@@ -2,12 +2,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgarIA.Core.Repositories\AgarIA.Core.Repositories.csproj" />
+    <ProjectReference Include="..\AgarIA.Core.Game\AgarIA.Core.Game.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Equibles.Core.AutoWiring" Version="1.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="System.Numerics.Tensors" Version="10.0.3" />
   </ItemGroup>
 
   <PropertyGroup>

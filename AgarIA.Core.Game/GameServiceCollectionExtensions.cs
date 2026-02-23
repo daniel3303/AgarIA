@@ -8,6 +8,7 @@ public static class GameServiceCollectionExtensions
     public static IServiceCollection AddGame(this IServiceCollection services)
     {
         services.AutoWireServicesFrom<GameAssembly>();
+        services.AddSingleton<SharedGrids>();
         services.AddSingleton<CollisionManager>();
         services.AddSingleton<GameEngine>();
         services.AddHostedService(sp => sp.GetRequiredService<GameEngine>());
