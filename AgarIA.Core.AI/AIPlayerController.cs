@@ -18,6 +18,8 @@ public class AIPlayerController
     private readonly Dictionary<string, double> _spawnMass = new();
     private readonly Dictionary<string, HashSet<int>> _visitedCells = new();
     private readonly Dictionary<string, long> _lastShotTick = new();
+    private readonly Dictionary<string, long> _spawnTick = new();
+    private long _currentTick;
     private const int ShootCooldownTicks = 10;
     private const int ExplorationGridSize = 40; // 4000/40 = 100 cells per axis, 10000 total
     private double _resetAtScore = 5000;
@@ -62,6 +64,7 @@ public class AIPlayerController
 
     public bool Tick(long currentTick)
     {
+        _currentTick = currentTick;
         CleanupDeadBots();
         MaintainBotCount();
         UpdateBots(currentTick);
@@ -102,6 +105,7 @@ public class AIPlayerController
             brain.SetGenome(_ga.GetGenome());
             _brains[id] = brain;
             _spawnMass[id] = GameConfig.StartMass;
+            _spawnTick[id] = _currentTick;
             _visitedCells[id] = new HashSet<int>();
         }
     }
@@ -378,13 +382,23 @@ public class AIPlayerController
         return features;
     }
 
-    private double ComputeFitness(string botId, double score, double killerMassShare = 0)
+    private double ComputeFitness(string botId, double score, double playerMassEaten, double killerMassShare = 0)
     {
         var totalCells = (int)(GameConfig.MapSize / ExplorationGridSize) * (int)(GameConfig.MapSize / ExplorationGridSize);
         var exploredCells = _visitedCells.TryGetValue(botId, out var visited) ? visited.Count : 0;
         var explorationRatio = (double)exploredCells / totalCells;
         var monopolyPenalty = 1.0 - killerMassShare;
-        return score * explorationRatio * monopolyPenalty;
+
+        // Reward aggression: player mass eaten counts double
+        var adjustedScore = score + playerMassEaten;
+
+        // Time efficiency: divide by sqrt(alive ticks) to reward faster mass gain
+        var aliveTicks = _spawnTick.TryGetValue(botId, out var spawn)
+            ? Math.Max(_currentTick - spawn, 1)
+            : 1;
+        var timeEfficiency = 1.0 / Math.Sqrt(aliveTicks);
+
+        return adjustedScore * timeEfficiency * explorationRatio * monopolyPenalty;
     }
 
     public void SaveGenomes() => _ga.Save();
@@ -403,11 +417,13 @@ public class AIPlayerController
             {
                 var player = _playerRepository.Get(id);
                 var score = player?.Score ?? 0.0;
+                var playerMassEaten = player?.MassEatenFromPlayers ?? 0;
                 var killerMassShare = player?.KillerMassShare ?? 0;
-                _ga.ReportFitness(brain.GetGenome(), ComputeFitness(id, score, killerMassShare));
+                _ga.ReportFitness(brain.GetGenome(), ComputeFitness(id, score, playerMassEaten, killerMassShare));
                 _brains.Remove(id);
             }
             _spawnMass.Remove(id);
+            _spawnTick.Remove(id);
             _lastShotTick.Remove(id);
             _visitedCells.Remove(id);
 

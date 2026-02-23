@@ -20,4 +20,5 @@ public class Player
     public long MergeAfterTick { get; set; }
     public string KilledById { get; set; }
     public double KillerMassShare { get; set; }
+    public double MassEatenFromPlayers { get; set; }
 }

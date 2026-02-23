@@ -152,6 +152,7 @@ public class GameEngine : IHostedService, IDisposable
         foreach (var (eater, prey) in kills)
         {
             eater.Mass += prey.Mass;
+            eater.MassEatenFromPlayers += prey.Mass;
             eater.SpeedBoostUntil = _gameState.CurrentTick + GameConfig.SpeedBoostDuration;
             prey.IsAlive = false;
 

@@ -19,6 +19,7 @@ public class GeneticAlgorithm
     private const double MutationSigma = 0.3;
     private const int TournamentSize = 3;
     private const double CrossoverRate = 0.7;
+    private const double FitnessDecayRate = 0.95;
 
     public GeneticAlgorithm(ILogger<GeneticAlgorithm> logger)
     {
@@ -48,6 +49,10 @@ public class GeneticAlgorithm
     {
         lock (_lock)
         {
+            // Decay all existing fitnesses so legacy genomes lose dominance over time
+            for (int i = 0; i < _pool.Count; i++)
+                _pool[i] = (_pool[i].Genome, _pool[i].Fitness * FitnessDecayRate);
+
             _pool.Add((genome, fitness));
 
             if (_pool.Count > PoolCapacity)
@@ -168,7 +173,7 @@ public class GeneticAlgorithm
             if (_pool.Count == 0) return null;
 
             var sorted = _pool.Select(p => p.Fitness).OrderByDescending(f => f).ToList();
-            var top3 = sorted.Take(3).ToList();
+            var top10 = sorted.Take(10).ToList();
             var average = sorted.Average();
             var mid = sorted.Count / 2;
             var median = sorted.Count % 2 == 0
@@ -177,7 +182,7 @@ public class GeneticAlgorithm
 
             return new
             {
-                top3,
+                top10,
                 average,
                 median,
                 poolSize = sorted.Count

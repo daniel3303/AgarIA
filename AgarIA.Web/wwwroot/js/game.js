@@ -5,6 +5,7 @@
     let lastUpdateTime = 0;
     let currentUsername = null;
     let isSpectating = false;
+    let isGameHidden = false;
     const camera = { x: 2000, y: 2000, zoom: 1 };
     const spectatorKeys = {};
 
@@ -90,6 +91,12 @@
         Network.setMaxSpeed(e.target.checked);
     });
 
+    // Toggle hide game — hides canvas, shows only leaderboard and fitness
+    document.getElementById("hideGameToggle").addEventListener("change", (e) => {
+        isGameHidden = e.target.checked;
+        canvas.style.display = isGameHidden ? "none" : "block";
+    });
+
     // Apply reset-at-score threshold to server
     document.getElementById("applyResetScore").addEventListener("click", (e) => {
         e.stopPropagation();
@@ -141,10 +148,11 @@
         });
     }
 
-    // Update fitness stats panel with top 3, average, and median
+    // Update fitness stats panel — show top 10 when game is hidden, top 3 otherwise
     function handleFitnessStats(data) {
-        const top3El = document.getElementById("fitnessTop3");
-        top3El.innerHTML = data.top3.map((f, i) =>
+        const topEl = document.getElementById("fitnessTop3");
+        const count = isGameHidden ? 10 : 3;
+        topEl.innerHTML = data.top10.slice(0, count).map((f, i) =>
             `<div>#${i + 1}: ${f.toFixed(2)}</div>`
         ).join("");
         document.getElementById("fitnessAvg").textContent = data.average.toFixed(2);
@@ -164,6 +172,9 @@
 
         // Send input to server (skip for spectators)
         if (!isSpectating) Input.update(camera);
+
+        // Skip rendering when game is hidden to save resources
+        if (isGameHidden) return;
 
         // Draw everything
         Renderer.render(renderState, camera);
