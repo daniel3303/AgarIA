@@ -3,4 +3,10 @@ bin/
 obj/
 ai_genomes.json
 appsettings.Development.json
+node_modules/
+AgarIA.Web/wwwroot/dist/
+admin.db
+admin.db-shm
+admin.db-wal
+package-lock.json
 

@@ -130,9 +130,32 @@ fitness = (score + playerMassEaten) × (1 / sqrt(aliveTicks)) × explorationRati
 
 Evolved neural network weights auto-save to `ai_genomes.json` every 60 seconds. This file persists across server restarts, allowing evolution to continue across sessions. Delete it to start fresh.
 
+## Admin Dashboard
+
+The project includes a password-protected admin panel for managing game settings, viewing history, and monitoring the simulation.
+
+### Features
+
+- **Collapsible sidebar** with icon-based navigation (Dashboard, Settings, Game History)
+- **Dark/light theme toggle** — persists across sessions via `localStorage`
+- **Sidebar state memory** — collapse/expand state persists via `localStorage`
+- **Responsive layout** — mobile hamburger menu, sticky top navbar
+- **HeroIcon tag helper** — inline SVG icons via `<icon name="..." size="5" />` syntax
+
+### Building Admin CSS
+
+The admin UI uses Tailwind CSS v4 with DaisyUI v5, built via Vite:
+
+```bash
+cd AgarIA.Web
+npm run build       # One-time production build
+npm run dev         # Watch mode for development
+```
+
 ## Tech Stack
 
 - **Backend**: .NET 10 (ASP.NET Core)
 - **Real-time**: SignalR WebSockets
 - **Frontend**: Vanilla JavaScript, HTML5 Canvas
 - **AI**: Custom neural network + genetic algorithm (no ML frameworks)
+- **Admin UI**: Tailwind CSS v4, DaisyUI v5, Vite
