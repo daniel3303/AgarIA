@@ -7,6 +7,8 @@ using Microsoft.Extensions.Logging;
 
 namespace AgarIA.Core.Game;
 
+public readonly record struct FoodDto(int id, double x, double y, int colorIndex);
+
 public class GameEngine : IHostedService, IDisposable
 {
     private readonly GameState _gameState;
@@ -223,6 +225,11 @@ public class GameEngine : IHostedService, IDisposable
     private void HandlePlayerCollisions()
     {
         var kills = _collisionManager.CheckPlayerCollisions();
+        if (kills.Count == 0) return;
+
+        // Compute total mass once before the loop
+        var totalMass = _playerRepository.GetAlive().Sum(p => p.Mass);
+
         foreach (var (eater, prey) in kills)
         {
             eater.Mass += prey.Mass;
@@ -234,7 +241,6 @@ public class GameEngine : IHostedService, IDisposable
             // Track killer info for anti-monopoly fitness penalty
             var killerId = eater.OwnerId ?? eater.Id;
             prey.KilledById = killerId;
-            var totalMass = _playerRepository.GetAlive().Sum(p => p.Mass) + prey.Mass;
             prey.KillerMassShare = totalMass > 0 ? eater.Mass / totalMass : 0;
 
             if (prey.OwnerId != null)
@@ -394,7 +400,8 @@ public class GameEngine : IHostedService, IDisposable
 
     private void BroadcastGameState()
     {
-        var players = _playerRepository.GetAlive().Select(p => new
+        var alivePlayers = _playerRepository.GetAlive().ToList();
+        var players = alivePlayers.Select(p => new
         {
             id = p.Id,
             x = p.X,
@@ -404,16 +411,14 @@ public class GameEngine : IHostedService, IDisposable
             colorIndex = p.ColorIndex,
             score = p.Score,
             boosting = _gameState.CurrentTick < p.SpeedBoostUntil,
-            ownerId = p.OwnerId
+            ownerId = p.OwnerId,
+            isAI = p.IsAI
         }).ToList();
 
-        var food = _foodRepository.GetAll().Select(f => new
-        {
-            id = f.Id,
-            x = f.X,
-            y = f.Y,
-            colorIndex = f.ColorIndex
-        }).ToList();
+        var foodList = new List<FoodDto>(_foodRepository.GetCount());
+        foreach (var f in _foodRepository.GetAll())
+            foodList.Add(new FoodDto(f.Id, f.X, f.Y, f.ColorIndex));
+        var food = foodList;
 
         var projectiles = _projectileRepository.GetAlive().Select(p => new
         {
@@ -423,7 +428,7 @@ public class GameEngine : IHostedService, IDisposable
             ownerId = p.OwnerId
         }).ToList();
 
-        var humanPlayers = _playerRepository.GetAlive().Where(p => !p.IsAI && p.OwnerId == null).ToList();
+        var humanPlayers = alivePlayers.Where(p => !p.IsAI && p.OwnerId == null).ToList();
         if (humanPlayers.Any() && !_loggedFirstBroadcast)
         {
             _loggedFirstBroadcast = true;
