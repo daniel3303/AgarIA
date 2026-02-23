@@ -40,12 +40,23 @@
     <div id="hud" style="display:none">
         <div id="scoreDisplay">Score: 0</div>
         <div id="fitnessPanel" style="display:none;">
-            <h3>Fitness</h3>
-            <div id="fitnessTop3"></div>
-            <div class="fitness-summary">
-                <div>Avg: <span id="fitnessAvg">—</span></div>
-                <div>Median: <span id="fitnessMedian">—</span></div>
-                <div>Pool: <span id="fitnessPool">—</span></div>
+            <div class="fitness-tier">
+                <h3>Easy (1-layer)</h3>
+                <div id="fitnessTop3Easy"></div>
+                <div class="fitness-summary">
+                    <div>Avg: <span id="fitnessAvgEasy">—</span></div>
+                    <div>Median: <span id="fitnessMedianEasy">—</span></div>
+                    <div>Pool: <span id="fitnessPoolEasy">—</span></div>
+                </div>
+            </div>
+            <div class="fitness-tier">
+                <h3>Medium (2-layer)</h3>
+                <div id="fitnessTop3Medium"></div>
+                <div class="fitness-summary">
+                    <div>Avg: <span id="fitnessAvgMedium">—</span></div>
+                    <div>Median: <span id="fitnessMedianMedium">—</span></div>
+                    <div>Pool: <span id="fitnessPoolMedium">—</span></div>
+                </div>
             </div>
         </div>
         <div id="leaderboard">

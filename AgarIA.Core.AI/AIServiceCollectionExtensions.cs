@@ -9,7 +9,6 @@ public static class AIServiceCollectionExtensions
     public static IServiceCollection AddAI(this IServiceCollection services)
     {
         services.AutoWireServicesFrom<AIAssembly>();
-        services.AddSingleton<GeneticAlgorithm>();
         services.AddSingleton<AIPlayerController>();
         services.AddSingleton<IAIController>(sp => sp.GetRequiredService<AIPlayerController>());
         return services;

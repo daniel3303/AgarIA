@@ -7,6 +7,7 @@
     let isSpectating = false;
     let botViewEnabled = false;
     let followedBotId = null;
+    let botViewData = null;
     const camera = { x: 2000, y: 2000, zoom: 1 };
     const spectatorKeys = {};
 
@@ -30,7 +31,8 @@
         onLeaderboard: handleLeaderboard,
         onReconnected: handleReconnected,
         onFitnessStats: handleFitnessStats,
-        onResetScores: handleResetScores
+        onResetScores: handleResetScores,
+        onBotViewUpdate: handleBotViewUpdate
     }).then(() => {
         console.log("Connected to game server");
     });
@@ -65,8 +67,12 @@
             botViewEnabled = !botViewEnabled;
             if (botViewEnabled) {
                 followedBotId = findNearestBot(camera.x, camera.y);
+                console.log("Bot view enabled, followedBotId:", followedBotId);
+                if (followedBotId) Network.enableBotView(followedBotId);
             } else {
                 followedBotId = null;
+                botViewData = null;
+                Network.disableBotView();
             }
         }
     });
@@ -134,18 +140,24 @@
         });
     }
 
-    // Update fitness stats panel — show top 3 genomes by fitness
+    // Update fitness stats panel — show top 3 genomes by fitness for Easy and Medium tiers
     function handleFitnessStats(data) {
         if (!data) return;
-        const topEl = document.getElementById("fitnessTop3");
+        updateFitnessTier(data.easy, "Easy");
+        updateFitnessTier(data.medium, "Medium");
+    }
+
+    function updateFitnessTier(tierData, suffix) {
+        if (!tierData) return;
+        const topEl = document.getElementById("fitnessTop3" + suffix);
         if (!topEl) return;
-        const topList = data.top10 || [];
+        const topList = tierData.top10 || [];
         topEl.innerHTML = topList.slice(0, 3).map((f, i) =>
             `<div>#${i + 1}: ${f.toFixed(2)}</div>`
         ).join("");
-        document.getElementById("fitnessAvg").textContent = data.average.toFixed(2);
-        document.getElementById("fitnessMedian").textContent = data.median.toFixed(2);
-        document.getElementById("fitnessPool").textContent = data.poolSize;
+        document.getElementById("fitnessAvg" + suffix).textContent = tierData.average.toFixed(2);
+        document.getElementById("fitnessMedian" + suffix).textContent = tierData.median.toFixed(2);
+        document.getElementById("fitnessPool" + suffix).textContent = tierData.poolSize;
     }
 
     // Display highest score from each of the previous 10 game resets (most recent first)
@@ -157,13 +169,22 @@
         ).join("");
     }
 
+    // Store latest bot view perception data from server
+    function handleBotViewUpdate(data) {
+        console.log("BotViewUpdate received:", data?.botId, "foodIds:", data?.foodIds?.length, "playerIds:", data?.playerIds?.length);
+        botViewData = data;
+    }
+
     // Click to select a different bot in bot view
     canvas.addEventListener("click", (e) => {
         if (!botViewEnabled) return;
         const worldX = (e.clientX - canvas.width / 2) / camera.zoom + camera.x;
         const worldY = (e.clientY - canvas.height / 2) / camera.zoom + camera.y;
         const nearest = findNearestBot(worldX, worldY);
-        if (nearest) followedBotId = nearest;
+        if (nearest) {
+            followedBotId = nearest;
+            Network.enableBotView(nearest);
+        }
     });
 
     // Find the nearest bot (AI, non-split-cell) to given world coordinates
@@ -178,7 +199,7 @@
         return best;
     }
 
-    // Filter render state to show only what the followed bot's neural network perceives
+    // Filter render state to show only what the followed bot's neural network perceives (server-driven)
     function applyBotView(renderState) {
         if (!botViewEnabled || !followedBotId) return renderState;
 
@@ -187,31 +208,24 @@
         if (!bot) {
             // Bot died — pick nearest new bot
             followedBotId = findNearestBot(camera.x, camera.y);
+            if (followedBotId) Network.enableBotView(followedBotId);
+            return renderState;
+        }
+
+        // If no server data yet, return unfiltered
+        if (!botViewData || botViewData.botId !== followedBotId) {
+            if (performance.now() % 1000 < 20) console.log("applyBotView: no match", "botViewData:", !!botViewData, "botViewData.botId:", botViewData?.botId, "followedBotId:", followedBotId);
             return renderState;
         }
 
         const bx = bot.x, by = bot.y;
-        const dist = (e) => Math.sqrt((e.x - bx) ** 2 + (e.y - by) ** 2);
+        const botOwnerId = bot.ownerId || bot.id;
 
-        // Food: 5 nearest within 800u
-        const foodWithDist = (renderState.food || []).map(f => ({ ...f, _d: dist(f) }));
-        foodWithDist.sort((a, b) => a._d - b._d);
-        const nearFood = new Set(foodWithDist.filter(f => f._d <= 800).slice(0, 5).map(f => f.id));
+        // Use server-provided perception sets
+        const nearFood = new Set(botViewData.foodIds);
         const food = (renderState.food || []).map(f => ({ ...f, ghosted: !nearFood.has(f.id) }));
 
-        // Players: 30 nearest within 1600u (exclude self cells)
-        const botOwnerId = bot.ownerId || bot.id;
-        const otherPlayers = renderState.players.filter(p => (p.ownerId || p.id) !== botOwnerId);
-        const playersWithDist = otherPlayers.map(p => ({ id: p.id, d: dist(p) }));
-        playersWithDist.sort((a, b) => a.d - b.d);
-        const nearPlayerIds = new Set(playersWithDist.filter(p => p.d <= 1600).slice(0, 30).map(p => p.id));
-
-        // Largest player globally
-        let largestId = null, largestRadius = 0;
-        for (const p of renderState.players) {
-            if (!p.ownerId && p.radius > largestRadius) { largestRadius = p.radius; largestId = p.id; }
-        }
-
+        const nearPlayerIds = new Set(botViewData.playerIds);
         const players = renderState.players.map(p => {
             const pid = p.ownerId || p.id;
             const isSelf = pid === botOwnerId;
@@ -219,15 +233,12 @@
             return {
                 ...p,
                 ghosted: !isSelf && !isNear,
-                isLargest: p.id === largestId,
+                isLargest: p.id === botViewData.largestPlayerId,
                 isSplitCell: isSelf && p.id !== followedBotId
             };
         });
 
-        // Projectiles: 5 nearest
-        const projWithDist = (renderState.projectiles || []).map(p => ({ ...p, _d: dist(p) }));
-        projWithDist.sort((a, b) => a._d - b._d);
-        const nearProj = new Set(projWithDist.slice(0, 5).map(p => p.id));
+        const nearProj = new Set(botViewData.projectileIds);
         const projectiles = (renderState.projectiles || []).map(p => ({ ...p, ghosted: !nearProj.has(p.id) }));
 
         return {
@@ -235,7 +246,7 @@
             players,
             food,
             projectiles,
-            botViewMeta: { botX: bx, botY: by, foodRadius: 800, playerRadius: 1600, botName: bot.username }
+            botViewMeta: { botX: bx, botY: by, foodRadius: botViewData.foodRadius, playerRadius: botViewData.playerRadius, botName: bot.username }
         };
     }
 

@@ -1,17 +1,16 @@
-using Equibles.Core.AutoWiring;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
 namespace AgarIA.Core.AI;
 
-[Service]
 public class GeneticAlgorithm
 {
     private readonly List<(double[] Genome, double Fitness)> _pool = new();
     private readonly object _lock = new();
     private readonly Random _random = new();
     private readonly ILogger<GeneticAlgorithm> _logger;
-    private readonly string _savePath = "ai_genomes.json";
+    private readonly string _savePath;
+    private readonly int _genomeSize;
     private DateTime _lastSave = DateTime.UtcNow;
     private DateTime _lastDecay = DateTime.UtcNow;
 
@@ -23,9 +22,11 @@ public class GeneticAlgorithm
     private const double FitnessDecayRate = 0.95;
     private const int DecayIntervalSeconds = 30;
 
-    public GeneticAlgorithm(ILogger<GeneticAlgorithm> logger)
+    public GeneticAlgorithm(ILogger<GeneticAlgorithm> logger, string savePath, int genomeSize)
     {
         _logger = logger;
+        _savePath = savePath;
+        _genomeSize = genomeSize;
         Load();
     }
 
@@ -98,7 +99,7 @@ public class GeneticAlgorithm
 
     private double[] RandomGenome()
     {
-        var genome = new double[NeuralNetwork.GenomeSize];
+        var genome = new double[_genomeSize];
         for (int i = 0; i < genome.Length; i++)
             genome[i] = (_random.NextDouble() * 2 - 1);
         return genome;
@@ -154,7 +155,7 @@ public class GeneticAlgorithm
                 var snapshot = _pool.ToList();
                 var json = JsonConvert.SerializeObject(snapshot.Select(p => new { p.Genome, p.Fitness }));
                 File.WriteAllText(_savePath, json);
-                _logger.LogInformation("Saved genome pool with {Count} entries", _pool.Count);
+                _logger.LogInformation("Saved genome pool with {Count} entries to {Path}", _pool.Count, _savePath);
             }
             catch (Exception ex)
             {
@@ -176,7 +177,7 @@ public class GeneticAlgorithm
             foreach (var entry in loaded)
                 _pool.Add((entry.Genome, entry.Fitness));
 
-            _logger.LogInformation("Loaded genome pool with {Count} entries", _pool.Count);
+            _logger.LogInformation("Loaded genome pool with {Count} entries from {Path}", _pool.Count, _savePath);
         }
         catch (Exception ex)
         {
