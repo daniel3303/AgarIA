@@ -12,6 +12,7 @@ public class AIPlayerController
     private readonly FoodRepository _foodRepository;
     private readonly ProjectileRepository _projectileRepository;
     private readonly GeneticAlgorithm _ga;
+    private readonly GameSettings _gameSettings;
     private readonly ILogger<AIPlayerController> _logger;
     private readonly Random _random = new();
     private readonly Dictionary<string, NeuralNetwork> _brains = new();
@@ -23,7 +24,6 @@ public class AIPlayerController
     private const int ShootCooldownTicks = 10;
     private const int CheckpointIntervalSeconds = 30;
     private const int ExplorationGridSize = 40; // 4000/40 = 100 cells per axis, 10000 total
-    private double _resetAtScore = 5000;
     private int _currentMaxAI = new Random().Next(10, 101);
 
     private static readonly string[] BotNames =
@@ -55,12 +55,14 @@ public class AIPlayerController
         FoodRepository foodRepository,
         ProjectileRepository projectileRepository,
         GeneticAlgorithm ga,
+        GameSettings gameSettings,
         ILogger<AIPlayerController> logger)
     {
         _playerRepository = playerRepository;
         _foodRepository = foodRepository;
         _projectileRepository = projectileRepository;
         _ga = ga;
+        _gameSettings = gameSettings;
         _logger = logger;
     }
 
@@ -74,13 +76,13 @@ public class AIPlayerController
         return CheckScoreThreshold();
     }
 
-    public void SetResetAtScore(double score) => _resetAtScore = score;
-    public double GetResetAtScore() => _resetAtScore;
+    public void SetResetAtScore(double score) => _gameSettings.ResetAtScore = score;
+    public double GetResetAtScore() => _gameSettings.ResetAtScore;
 
     private bool CheckScoreThreshold()
     {
         return _playerRepository.GetAll()
-            .Any(p => p.IsAlive && p.OwnerId == null && p.Score >= _resetAtScore);
+            .Any(p => p.IsAlive && p.OwnerId == null && p.Score >= _gameSettings.ResetAtScore);
     }
 
     private void MaintainBotCount()
@@ -405,7 +407,7 @@ public class AIPlayerController
 
     public void RandomizePlayerCount()
     {
-        _currentMaxAI = _random.Next(10, 101);
+        _currentMaxAI = _random.Next(_gameSettings.MinAIPlayers, _gameSettings.MaxAIPlayers + 1);
         _logger.LogInformation("Randomized bot count to {Count}", _currentMaxAI);
     }
 
