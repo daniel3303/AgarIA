@@ -28,7 +28,8 @@
         onDied: handleDied,
         onLeaderboard: handleLeaderboard,
         onReconnected: handleReconnected,
-        onFitnessStats: handleFitnessStats
+        onFitnessStats: handleFitnessStats,
+        onResetScores: handleResetScores
     }).then(() => {
         console.log("Connected to game server");
     });
@@ -54,6 +55,8 @@
             scoreDisplay.textContent = "SPECTATING";
             document.getElementById("resetPanel").style.display = "block";
             document.getElementById("fitnessPanel").style.display = "block";
+            document.getElementById("controls").style.display = "none";
+            document.getElementById("resetScoresPanel").style.display = "block";
         });
     });
 
@@ -95,6 +98,14 @@
     document.getElementById("hideGameToggle").addEventListener("change", (e) => {
         isGameHidden = e.target.checked;
         document.getElementById("gameCanvas").style.visibility = isGameHidden ? "hidden" : "visible";
+    });
+
+    // Apply auto reset interval to server
+    document.getElementById("applyAutoReset").addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const seconds = parseInt(document.getElementById("autoResetSeconds").value) || 0;
+        Network.setAutoResetSeconds(seconds);
     });
 
     // Apply reset-at-score threshold to server
@@ -160,6 +171,15 @@
         document.getElementById("fitnessAvg").textContent = data.average.toFixed(2);
         document.getElementById("fitnessMedian").textContent = data.median.toFixed(2);
         document.getElementById("fitnessPool").textContent = data.poolSize;
+    }
+
+    // Display highest score from each of the previous 10 game resets (most recent first)
+    function handleResetScores(data) {
+        if (!data || !data.length) return;
+        const list = document.getElementById("resetScoresList");
+        list.innerHTML = [...data].reverse().map(e =>
+            `<li><span class="rs-name">${escapeHtml(e.username)}</span> <span class="rs-score">${e.score}</span></li>`
+        ).join("");
     }
 
     // Main render loop at 60fps with interpolation between server ticks

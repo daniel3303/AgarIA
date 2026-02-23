@@ -251,6 +251,47 @@ canvas {
     color: #888;
 }
 
+#resetScoresPanel {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    background: rgba(26, 26, 46, 0.85);
+    border-radius: 10px;
+    padding: 12px 16px;
+    min-width: 180px;
+    font-family: monospace;
+    font-size: 13px;
+    color: #e0e0ff;
+}
+
+#resetScoresPanel h4 {
+    color: #7efcf6;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 0 0 8px;
+}
+
+#resetScoresList {
+    margin: 0;
+    padding-left: 20px;
+    list-style: decimal;
+}
+
+#resetScoresList li {
+    padding: 2px 0;
+    font-size: 12px;
+    color: #e0e0ff;
+}
+
+#resetScoresList li .rs-name {
+    color: #aaa;
+}
+
+#resetScoresList li .rs-score {
+    color: #7efcf6;
+    font-weight: 600;
+}
+
 #controls kbd {
     display: inline-block;
     padding: 2px 6px;

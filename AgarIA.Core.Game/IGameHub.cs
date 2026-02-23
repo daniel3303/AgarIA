@@ -10,6 +10,7 @@ public interface IGameHub
     Task Died(object data);
     Task Leaderboard(object data);
     Task FitnessStats(object data);
+    Task ResetScores(object data);
 }
 
 public class GameHub : Hub<IGameHub>
@@ -157,6 +158,11 @@ public class GameHub : Hub<IGameHub>
     public void SetResetAtScore(double score)
     {
         _gameEngine.SetResetAtScore(score);
+    }
+
+    public void SetAutoResetSeconds(int seconds)
+    {
+        _gameEngine.SetAutoResetSeconds(seconds);
     }
 
     public void SetMaxSpeed(bool enabled)

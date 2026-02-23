@@ -24,6 +24,7 @@ public class AIPlayerController
     private const int CheckpointIntervalSeconds = 30;
     private const int ExplorationGridSize = 40; // 4000/40 = 100 cells per axis, 10000 total
     private double _resetAtScore = 5000;
+    private int _currentMaxAI = new Random().Next(10, 101);
 
     private static readonly string[] BotNames =
     {
@@ -85,7 +86,7 @@ public class AIPlayerController
     private void MaintainBotCount()
     {
         var aiBots = _playerRepository.GetAll().Where(p => p.IsAI && p.IsAlive && p.OwnerId == null).ToList();
-        var needed = GameConfig.MaxAI - aiBots.Count;
+        var needed = _currentMaxAI - aiBots.Count;
 
         for (int i = 0; i < needed; i++)
         {
@@ -400,6 +401,12 @@ public class AIPlayerController
         var timeEfficiency = 1.0 / Math.Sqrt(aliveTicks);
 
         return adjustedScore * timeEfficiency * explorationRatio * monopolyPenalty;
+    }
+
+    public void RandomizePlayerCount()
+    {
+        _currentMaxAI = _random.Next(10, 101);
+        _logger.LogInformation("Randomized bot count to {Count}", _currentMaxAI);
     }
 
     public void SaveGenomes() => _ga.Save();

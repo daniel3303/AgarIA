@@ -6,6 +6,7 @@ const Network = (() => {
     let onLeaderboard = null;
     let onReconnected = null;
     let onFitnessStats = null;
+    let onResetScores = null;
 
     // Build SignalR connection to game hub
     function init(callbacks) {
@@ -14,6 +15,7 @@ const Network = (() => {
         onLeaderboard = callbacks.onLeaderboard;
         onReconnected = callbacks.onReconnected;
         onFitnessStats = callbacks.onFitnessStats;
+        onResetScores = callbacks.onResetScores;
 
         connection = new signalR.HubConnectionBuilder()
             .withUrl("/gamehub")
@@ -36,6 +38,11 @@ const Network = (() => {
         // Receive fitness stats for spectators
         connection.on("FitnessStats", (data) => {
             if (onFitnessStats) onFitnessStats(data);
+        });
+
+        // Receive top scores from the last reset
+        connection.on("ResetScores", (data) => {
+            if (onResetScores) onResetScores(data);
         });
 
         connection.onreconnected(() => {
@@ -108,5 +115,12 @@ const Network = (() => {
         }
     }
 
-    return { init, join, move, respawn, split, shoot, spectate, reset, setResetAtScore, setMaxSpeed };
+    // Set auto reset interval in seconds (0 to disable)
+    function setAutoResetSeconds(seconds) {
+        if (connection && connection.state === signalR.HubConnectionState.Connected) {
+            connection.invoke("SetAutoResetSeconds", seconds).catch(e => console.error("SetAutoResetSeconds failed", e));
+        }
+    }
+
+    return { init, join, move, respawn, split, shoot, spectate, reset, setResetAtScore, setMaxSpeed, setAutoResetSeconds };
 })();

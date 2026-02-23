@@ -54,12 +54,21 @@
             <span><kbd>Space</kbd> Split</span>
             <span><kbd>Click</kbd> Shoot</span>
         </div>
+        <div id="resetScoresPanel" style="display:none;">
+            <h4>Last Reset Scores</h4>
+            <ol id="resetScoresList"></ol>
+        </div>
     </div>
     <div id="resetPanel" style="display:none;position:fixed;bottom:16px;right:16px;z-index:1000;pointer-events:auto;text-align:right;">
         <div style="margin-bottom:6px;display:flex;align-items:center;gap:6px;justify-content:flex-end;">
             <label style="color:#1a1a2e;font-size:12px;">Reset at score</label>
             <input id="resetAtScore" type="number" min="100" value="5000" style="width:70px;padding:3px 6px;font-size:12px;border-radius:6px;border:1px solid #ccc;">
             <button id="applyResetScore" class="neon-button" style="font-size:11px;padding:4px 10px;cursor:pointer;">APPLY</button>
+        </div>
+        <div style="margin-bottom:6px;display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+            <label style="color:#1a1a2e;font-size:12px;">Auto reset (seconds)</label>
+            <input id="autoResetSeconds" type="number" min="0" value="0" style="width:70px;padding:3px 6px;font-size:12px;border-radius:6px;border:1px solid #ccc;">
+            <button id="applyAutoReset" class="neon-button" style="font-size:11px;padding:4px 10px;cursor:pointer;">APPLY</button>
         </div>
         <div style="margin-bottom:6px;display:flex;align-items:center;gap:6px;justify-content:flex-end;">
             <label style="color:#1a1a2e;font-size:12px;">Max Speed</label>

@@ -25,6 +25,9 @@ public class GameEngine : IHostedService, IDisposable
     private volatile bool _resetRequested;
     private volatile bool _maxSpeed;
     private int _tickRunning;
+    private long _resetIntervalTicks;
+    private long _lastResetTick;
+    private readonly List<object> _resetScoreHistory = new();
 
     public GameEngine(
         GameState gameState,
@@ -92,6 +95,8 @@ public class GameEngine : IHostedService, IDisposable
             var shouldReset = _aiController.Tick(_gameState.CurrentTick);
             BroadcastGameState();
             if (shouldReset) _resetRequested = true;
+            if (_resetIntervalTicks > 0 && _gameState.CurrentTick - _lastResetTick >= _resetIntervalTicks)
+                _resetRequested = true;
         }
         catch (Exception ex)
         {
@@ -433,6 +438,13 @@ public class GameEngine : IHostedService, IDisposable
 
     public void SetResetAtScore(double score) => _aiController.SetResetAtScore(score);
 
+    public void SetAutoResetSeconds(int seconds)
+    {
+        _resetIntervalTicks = seconds * GameConfig.TickRate;
+        _lastResetTick = _gameState.CurrentTick;
+        _logger.LogInformation("Auto reset set to {Seconds}s ({Ticks} ticks)", seconds, _resetIntervalTicks);
+    }
+
     public void SetMaxSpeed(bool enabled)
     {
         _maxSpeed = enabled;
@@ -443,6 +455,23 @@ public class GameEngine : IHostedService, IDisposable
 
     private void PerformReset()
     {
+        var topPlayer = _playerRepository.GetAlive()
+            .Where(p => p.OwnerId == null)
+            .OrderByDescending(p => p.Score)
+            .FirstOrDefault();
+
+        if (topPlayer != null)
+        {
+            _resetScoreHistory.Add(new { username = topPlayer.Username, score = topPlayer.Score });
+            if (_resetScoreHistory.Count > 10)
+                _resetScoreHistory.RemoveAt(0);
+
+            foreach (var spectatorId in _gameState.Spectators.Keys)
+            {
+                _hubContext.Clients.Client(spectatorId).ResetScores(_resetScoreHistory);
+            }
+        }
+
         foreach (var player in _playerRepository.GetAlive().ToList())
         {
             player.IsAlive = false;
@@ -457,6 +486,8 @@ public class GameEngine : IHostedService, IDisposable
             _foodRepository.Remove(food.Id);
         }
         SpawnInitialFood();
+        _lastResetTick = _gameState.CurrentTick;
+        _aiController.RandomizePlayerCount();
         _aiController.SaveGenomes();
         _logger.LogInformation("Game reset performed");
     }
