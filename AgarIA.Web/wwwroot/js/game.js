@@ -94,7 +94,7 @@
     // Toggle hide game — hides canvas, shows only leaderboard and fitness
     document.getElementById("hideGameToggle").addEventListener("change", (e) => {
         isGameHidden = e.target.checked;
-        canvas.style.display = isGameHidden ? "none" : "block";
+        document.getElementById("gameCanvas").style.visibility = isGameHidden ? "hidden" : "visible";
     });
 
     // Apply reset-at-score threshold to server
@@ -150,9 +150,11 @@
 
     // Update fitness stats panel — show top 10 when game is hidden, top 3 otherwise
     function handleFitnessStats(data) {
+        if (!data) return;
         const topEl = document.getElementById("fitnessTop3");
         const count = isGameHidden ? 10 : 3;
-        topEl.innerHTML = data.top10.slice(0, count).map((f, i) =>
+        const topList = data.top10 || [];
+        topEl.innerHTML = topList.slice(0, count).map((f, i) =>
             `<div>#${i + 1}: ${f.toFixed(2)}</div>`
         ).join("");
         document.getElementById("fitnessAvg").textContent = data.average.toFixed(2);
