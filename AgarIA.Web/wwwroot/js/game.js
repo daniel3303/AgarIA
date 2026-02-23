@@ -5,7 +5,6 @@
     let lastUpdateTime = 0;
     let currentUsername = null;
     let isSpectating = false;
-    let isGameHidden = false;
     const camera = { x: 2000, y: 2000, zoom: 1 };
     const spectatorKeys = {};
 
@@ -46,17 +45,14 @@
         });
     });
 
-    // Spectate button
+    // Spectate button — view-only mode (canvas + leaderboard only)
     spectateButton.addEventListener("click", () => {
         Network.spectate().then(() => {
             isSpectating = true;
             joinOverlay.style.display = "none";
             hud.style.display = "block";
             scoreDisplay.textContent = "SPECTATING";
-            document.getElementById("resetPanel").style.display = "block";
-            document.getElementById("fitnessPanel").style.display = "block";
             document.getElementById("controls").style.display = "none";
-            document.getElementById("resetScoresPanel").style.display = "block";
         });
     });
 
@@ -82,39 +78,6 @@
         });
     });
 
-    // Reset game — kills all players so AI can re-evolve
-    document.getElementById("resetButton").addEventListener("click", (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        Network.reset();
-    });
-
-    // Toggle max speed simulation mode
-    document.getElementById("maxSpeedToggle").addEventListener("change", (e) => {
-        Network.setMaxSpeed(e.target.checked);
-    });
-
-    // Toggle hide game — hides canvas, shows only leaderboard and fitness
-    document.getElementById("hideGameToggle").addEventListener("change", (e) => {
-        isGameHidden = e.target.checked;
-        document.getElementById("gameCanvas").style.visibility = isGameHidden ? "hidden" : "visible";
-    });
-
-    // Apply auto reset interval to server
-    document.getElementById("applyAutoReset").addEventListener("click", (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        const seconds = parseInt(document.getElementById("autoResetSeconds").value) || 0;
-        Network.setAutoResetSeconds(seconds);
-    });
-
-    // Apply reset-at-score threshold to server
-    document.getElementById("applyResetScore").addEventListener("click", (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        const score = parseFloat(document.getElementById("resetAtScore").value) || 5000;
-        Network.setResetAtScore(score);
-    });
 
     // Re-join after SignalR reconnects with new connection ID
     function handleReconnected() {
@@ -159,13 +122,13 @@
         });
     }
 
-    // Update fitness stats panel — show top 10 when game is hidden, top 3 otherwise
+    // Update fitness stats panel — show top 3 genomes by fitness
     function handleFitnessStats(data) {
         if (!data) return;
         const topEl = document.getElementById("fitnessTop3");
-        const count = isGameHidden ? 10 : 3;
+        if (!topEl) return;
         const topList = data.top10 || [];
-        topEl.innerHTML = topList.slice(0, count).map((f, i) =>
+        topEl.innerHTML = topList.slice(0, 3).map((f, i) =>
             `<div>#${i + 1}: ${f.toFixed(2)}</div>`
         ).join("");
         document.getElementById("fitnessAvg").textContent = data.average.toFixed(2);
@@ -194,9 +157,6 @@
 
         // Send input to server (skip for spectators)
         if (!isSpectating) Input.update(camera);
-
-        // Skip rendering when game is hidden to save resources
-        if (isGameHidden) return;
 
         // Draw everything
         Renderer.render(renderState, camera);

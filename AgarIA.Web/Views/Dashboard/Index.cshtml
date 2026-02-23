@@ -1,0 +1,56 @@
+@model AgarIA.Web.ViewModels.DashboardViewModel
+
+<!-- Live game stats cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Current Tick</div>
+        <div class="stat-value text-lg">@Model.CurrentTick</div>
+    </div>
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Total Players</div>
+        <div class="stat-value text-lg">@Model.TotalPlayers</div>
+        <div class="stat-desc">@Model.HumanPlayers human / @Model.AiPlayers AI</div>
+    </div>
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Food Items</div>
+        <div class="stat-value text-lg">@Model.FoodCount</div>
+    </div>
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Top Score</div>
+        <div class="stat-value text-lg">@Model.TopScore</div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Spectators</div>
+        <div class="stat-value text-lg">@Model.Spectators</div>
+    </div>
+</div>
+
+<!-- Recent rounds -->
+@if (Model.RecentRounds.Any()) {
+    <h3 class="text-lg font-bold mt-8 mb-4">Recent Rounds</h3>
+    <div class="overflow-x-auto">
+        <table class="table table-zebra">
+            <thead>
+                <tr>
+                    <th>Ended</th>
+                    <th>Duration</th>
+                    <th>Players</th>
+                    <th>Total Mass</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var round in Model.RecentRounds) {
+                    <tr>
+                        <td>@round.EndedAt.ToString("g")</td>
+                        <td>@TimeSpan.FromSeconds(round.DurationTicks / 20.0).ToString(@"mm\:ss")</td>
+                        <td>@round.PlayerCount (@round.AiPlayerCount AI)</td>
+                        <td>@((int)round.TotalMass)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

@@ -1,0 +1,40 @@
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('admin-theme') || 'light');</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Agar.IA Admin</title>
+    <link href="~/dist/admin.css" rel="stylesheet" />
+</head>
+<body class="min-h-screen flex items-center justify-center bg-base-300">
+    <div class="card bg-base-100 shadow-xl w-full max-w-sm">
+        <div class="card-body">
+            <h2 class="card-title justify-center text-2xl mb-4">Agar.IA Admin</h2>
+
+            @if (ViewData["Error"] is string error) {
+                <div class="alert alert-error mb-4">@error</div>
+            }
+
+            <form asp-action="Login" method="post">
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Username</legend>
+                    <input type="text" name="username" class="input w-full" required autofocus />
+                </fieldset>
+
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Password</legend>
+                    <input type="password" name="password" class="input w-full" required />
+                </fieldset>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-neutral w-full">Login</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
