@@ -13,6 +13,7 @@ public class GeneticAlgorithm
     private readonly ILogger<GeneticAlgorithm> _logger;
     private readonly string _savePath = "ai_genomes.json";
     private DateTime _lastSave = DateTime.UtcNow;
+    private DateTime _lastDecay = DateTime.UtcNow;
 
     private const int PoolCapacity = 50;
     private const double MutationRate = 0.10;
@@ -20,6 +21,7 @@ public class GeneticAlgorithm
     private const int TournamentSize = 3;
     private const double CrossoverRate = 0.7;
     private const double FitnessDecayRate = 0.95;
+    private const int DecayIntervalSeconds = 30;
 
     public GeneticAlgorithm(ILogger<GeneticAlgorithm> logger)
     {
@@ -49,9 +51,13 @@ public class GeneticAlgorithm
     {
         lock (_lock)
         {
-            // Decay all existing fitnesses so legacy genomes lose dominance over time
-            for (int i = 0; i < _pool.Count; i++)
-                _pool[i] = (_pool[i].Genome, _pool[i].Fitness * FitnessDecayRate);
+            // Decay all existing fitnesses every 30s so legacy genomes lose dominance over time
+            if ((DateTime.UtcNow - _lastDecay).TotalSeconds >= DecayIntervalSeconds)
+            {
+                for (int i = 0; i < _pool.Count; i++)
+                    _pool[i] = (_pool[i].Genome, _pool[i].Fitness * FitnessDecayRate);
+                _lastDecay = DateTime.UtcNow;
+            }
 
             _pool.Add((genome, fitness));
 
