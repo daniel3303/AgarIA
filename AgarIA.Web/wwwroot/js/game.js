@@ -5,6 +5,8 @@
     let lastUpdateTime = 0;
     let currentUsername = null;
     let isSpectating = false;
+    let botViewEnabled = false;
+    let followedBotId = null;
     const camera = { x: 2000, y: 2000, zoom: 1 };
     const spectatorKeys = {};
 
@@ -57,7 +59,17 @@
     });
 
     // Spectator camera controls
-    window.addEventListener("keydown", (e) => { spectatorKeys[e.code] = true; });
+    window.addEventListener("keydown", (e) => {
+        spectatorKeys[e.code] = true;
+        if (e.code === "KeyB" && isSpectating) {
+            botViewEnabled = !botViewEnabled;
+            if (botViewEnabled) {
+                followedBotId = findNearestBot(camera.x, camera.y);
+            } else {
+                followedBotId = null;
+            }
+        }
+    });
     window.addEventListener("keyup", (e) => { spectatorKeys[e.code] = false; });
     canvas.addEventListener("wheel", (e) => {
         if (!isSpectating) return;
@@ -145,14 +157,99 @@
         ).join("");
     }
 
+    // Click to select a different bot in bot view
+    canvas.addEventListener("click", (e) => {
+        if (!botViewEnabled) return;
+        const worldX = (e.clientX - canvas.width / 2) / camera.zoom + camera.x;
+        const worldY = (e.clientY - canvas.height / 2) / camera.zoom + camera.y;
+        const nearest = findNearestBot(worldX, worldY);
+        if (nearest) followedBotId = nearest;
+    });
+
+    // Find the nearest bot (AI, non-split-cell) to given world coordinates
+    function findNearestBot(wx, wy) {
+        if (!gameState.players) return null;
+        let best = null, bestDist = Infinity;
+        for (const p of gameState.players) {
+            if (!p.isAI || p.ownerId) continue;
+            const d = (p.x - wx) ** 2 + (p.y - wy) ** 2;
+            if (d < bestDist) { bestDist = d; best = p.id; }
+        }
+        return best;
+    }
+
+    // Filter render state to show only what the followed bot's neural network perceives
+    function applyBotView(renderState) {
+        if (!botViewEnabled || !followedBotId) return renderState;
+
+        // Find followed bot (main cell, not split)
+        const bot = renderState.players.find(p => p.id === followedBotId);
+        if (!bot) {
+            // Bot died — pick nearest new bot
+            followedBotId = findNearestBot(camera.x, camera.y);
+            return renderState;
+        }
+
+        const bx = bot.x, by = bot.y;
+        const dist = (e) => Math.sqrt((e.x - bx) ** 2 + (e.y - by) ** 2);
+
+        // Food: 5 nearest within 800u
+        const foodWithDist = (renderState.food || []).map(f => ({ ...f, _d: dist(f) }));
+        foodWithDist.sort((a, b) => a._d - b._d);
+        const nearFood = new Set(foodWithDist.filter(f => f._d <= 800).slice(0, 5).map(f => f.id));
+        const food = (renderState.food || []).map(f => ({ ...f, ghosted: !nearFood.has(f.id) }));
+
+        // Players: 30 nearest within 1600u (exclude self cells)
+        const botOwnerId = bot.ownerId || bot.id;
+        const otherPlayers = renderState.players.filter(p => (p.ownerId || p.id) !== botOwnerId);
+        const playersWithDist = otherPlayers.map(p => ({ id: p.id, d: dist(p) }));
+        playersWithDist.sort((a, b) => a.d - b.d);
+        const nearPlayerIds = new Set(playersWithDist.filter(p => p.d <= 1600).slice(0, 30).map(p => p.id));
+
+        // Largest player globally
+        let largestId = null, largestRadius = 0;
+        for (const p of renderState.players) {
+            if (!p.ownerId && p.radius > largestRadius) { largestRadius = p.radius; largestId = p.id; }
+        }
+
+        const players = renderState.players.map(p => {
+            const pid = p.ownerId || p.id;
+            const isSelf = pid === botOwnerId;
+            const isNear = nearPlayerIds.has(p.id);
+            return {
+                ...p,
+                ghosted: !isSelf && !isNear,
+                isLargest: p.id === largestId,
+                isSplitCell: isSelf && p.id !== followedBotId
+            };
+        });
+
+        // Projectiles: 5 nearest
+        const projWithDist = (renderState.projectiles || []).map(p => ({ ...p, _d: dist(p) }));
+        projWithDist.sort((a, b) => a._d - b._d);
+        const nearProj = new Set(projWithDist.slice(0, 5).map(p => p.id));
+        const projectiles = (renderState.projectiles || []).map(p => ({ ...p, ghosted: !nearProj.has(p.id) }));
+
+        return {
+            ...renderState,
+            players,
+            food,
+            projectiles,
+            botViewMeta: { botX: bx, botY: by, foodRadius: 800, playerRadius: 1600, botName: bot.username }
+        };
+    }
+
     // Main render loop at 60fps with interpolation between server ticks
     function gameLoop() {
         requestAnimationFrame(gameLoop);
 
         // Interpolate positions between ticks for smooth movement
-        const renderState = interpolate();
+        let renderState = interpolate();
 
-        // Update camera to follow current player
+        // Apply bot view filter before rendering
+        renderState = applyBotView(renderState);
+
+        // Update camera to follow current player (or followed bot)
         updateCamera(renderState);
 
         // Send input to server (skip for spectators)
@@ -212,6 +309,17 @@
     // Smoothly move camera to center on the player, zoom out as mass grows
     function updateCamera(state) {
         if (isSpectating) {
+            // Bot view: lock camera to followed bot
+            if (botViewEnabled && state.botViewMeta) {
+                const bot = state.players.find(p => p.id === followedBotId);
+                if (bot) {
+                    const targetZoom = Math.max(0.3, 1 - (bot.radius - 12) / 300);
+                    camera.x += (bot.x - camera.x) * 0.1;
+                    camera.y += (bot.y - camera.y) * 0.1;
+                    camera.zoom += (targetZoom - camera.zoom) * 0.05;
+                    return;
+                }
+            }
             const panSpeed = 10 / camera.zoom;
             if (spectatorKeys["KeyW"] || spectatorKeys["ArrowUp"]) camera.y -= panSpeed;
             if (spectatorKeys["KeyS"] || spectatorKeys["ArrowDown"]) camera.y += panSpeed;

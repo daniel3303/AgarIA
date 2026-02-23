@@ -51,7 +51,43 @@ const Renderer = (() => {
         drawPlayers(gameState.players, gameState.you);
         drawBorder();
 
+        // Bot view range circles
+        if (gameState.botViewMeta) {
+            const meta = gameState.botViewMeta;
+            ctx.setLineDash([12, 8]);
+            ctx.lineWidth = 2;
+
+            // Food perception range (green)
+            ctx.beginPath();
+            ctx.arc(meta.botX, meta.botY, meta.foodRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = "rgba(0, 184, 148, 0.5)";
+            ctx.stroke();
+
+            // Player perception range (blue)
+            ctx.beginPath();
+            ctx.arc(meta.botX, meta.botY, meta.playerRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = "rgba(9, 132, 227, 0.5)";
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+        }
+
         ctx.restore();
+
+        // Bot view HUD label
+        if (gameState.botViewMeta) {
+            ctx.save();
+            ctx.font = "bold 18px 'Inter', 'Segoe UI', system-ui, sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+            const text = `BOT VIEW: ${gameState.botViewMeta.botName}  [B to exit]`;
+            const tw = ctx.measureText(text).width;
+            ctx.fillRect(canvas.width / 2 - tw / 2 - 12, 8, tw + 24, 32);
+            ctx.fillStyle = "#00b894";
+            ctx.fillText(text, canvas.width / 2, 14);
+            ctx.restore();
+        }
 
         // Minimap
         drawMinimap(gameState, camera);
@@ -85,11 +121,13 @@ const Renderer = (() => {
     function drawFood(food) {
         if (!food) return;
         for (const f of food) {
+            if (f.ghosted) ctx.globalAlpha = 0.1;
             const color = COLORS[f.colorIndex] || COLORS[0];
             ctx.beginPath();
             ctx.arc(f.x, f.y, 5, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
+            if (f.ghosted) ctx.globalAlpha = 1;
         }
     }
 
@@ -132,6 +170,7 @@ const Renderer = (() => {
     function drawProjectiles(projectiles) {
         if (!projectiles) return;
         for (const p of projectiles) {
+            if (p.ghosted) ctx.globalAlpha = 0.1;
             // Outer glow
             ctx.beginPath();
             ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
@@ -152,6 +191,7 @@ const Renderer = (() => {
             ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
             ctx.fillStyle = "#ffffff";
             ctx.fill();
+            if (p.ghosted) ctx.globalAlpha = 1;
         }
     }
 
@@ -159,6 +199,7 @@ const Renderer = (() => {
     function drawPlayers(players, myId) {
         if (!players) return;
         for (const p of players) {
+            if (p.ghosted) ctx.globalAlpha = 0.1;
             const color = COLORS[p.colorIndex] || COLORS[0];
 
             // Soft drop shadow
@@ -196,6 +237,26 @@ const Renderer = (() => {
             ctx.strokeText(p.username, p.x, p.y);
             ctx.fillStyle = "#1a1a2e";
             ctx.fillText(p.username, p.x, p.y);
+
+            // Bot view indicators (drawn at full alpha even if ghosted)
+            if (p.ghosted) ctx.globalAlpha = 1;
+            if (p.isLargest) {
+                // Crown/star indicator above player
+                ctx.font = `${Math.max(16, p.radius * 0.5)}px sans-serif`;
+                ctx.textAlign = "center";
+                ctx.fillText("\u2B50", p.x, p.y - p.radius - 8);
+            }
+            if (p.isSplitCell) {
+                // Chain/link indicator
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius + 4, 0, Math.PI * 2);
+                ctx.strokeStyle = "rgba(253, 203, 110, 0.8)";
+                ctx.lineWidth = 3;
+                ctx.setLineDash([6, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            if (p.ghosted) ctx.globalAlpha = 1;
         }
     }
 
