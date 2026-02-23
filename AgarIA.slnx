@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="AgarIA.Core.AI/AgarIA.Core.AI.csproj" />
+  <Project Path="AgarIA.Core.Data/AgarIA.Core.Data.csproj" />
+  <Project Path="AgarIA.Core.Game/AgarIA.Core.Game.csproj" />
+  <Project Path="AgarIA.Core.Repositories/AgarIA.Core.Repositories.csproj" />
+  <Project Path="AgarIA.Web/AgarIA.Web.csproj" />
+</Solution>

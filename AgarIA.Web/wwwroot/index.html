@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agar.IA</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Join overlay -->
+    <div id="joinOverlay" class="overlay">
+        <div class="overlay-content">
+            <h1 class="neon-title">AGAR.IA</h1>
+            <p class="subtitle">AI-powered cell arena</p>
+            <div class="form-group">
+                <input type="text" id="usernameInput" placeholder="Username" maxlength="20" autocomplete="off">
+            </div>
+            <button id="playButton" class="neon-button">PLAY</button>
+            <button id="spectateButton" class="neon-button spectate-btn">SPECTATE</button>
+        </div>
+    </div>
+
+    <!-- Death overlay -->
+    <div id="deathOverlay" class="overlay" style="display:none">
+        <div class="overlay-content">
+            <h2 class="neon-title death-title">YOU DIED</h2>
+            <p id="killedByText" class="death-info"></p>
+            <p id="finalScoreText" class="death-score"></p>
+            <button id="respawnButton" class="neon-button">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" style="display:none">
+        <div id="scoreDisplay">Score: 0</div>
+        <div id="fitnessPanel" style="display:none;">
+            <h3>Fitness</h3>
+            <div id="fitnessTop3"></div>
+            <div class="fitness-summary">
+                <div>Avg: <span id="fitnessAvg">—</span></div>
+                <div>Median: <span id="fitnessMedian">—</span></div>
+                <div>Pool: <span id="fitnessPool">—</span></div>
+            </div>
+        </div>
+        <div id="leaderboard">
+            <h3>Leaderboard</h3>
+            <ol id="leaderboardList"></ol>
+        </div>
+        <div id="controls">
+            <span><kbd>Mouse</kbd> Move</span>
+            <span><kbd>Space</kbd> Split</span>
+            <span><kbd>Click</kbd> Shoot</span>
+        </div>
+    </div>
+    <div id="resetPanel" style="display:none;position:fixed;bottom:16px;right:16px;z-index:1000;pointer-events:auto;text-align:right;">
+        <div style="margin-bottom:6px;display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+            <label style="color:#1a1a2e;font-size:12px;">Reset at score</label>
+            <input id="resetAtScore" type="number" min="100" value="5000" style="width:70px;padding:3px 6px;font-size:12px;border-radius:6px;border:1px solid #ccc;">
+            <button id="applyResetScore" class="neon-button" style="font-size:11px;padding:4px 10px;cursor:pointer;">APPLY</button>
+        </div>
+        <div style="margin-bottom:6px;display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+            <label style="color:#1a1a2e;font-size:12px;">Max Speed</label>
+            <input id="maxSpeedToggle" type="checkbox" style="cursor:pointer;">
+        </div>
+        <button id="resetButton" class="neon-button" style="font-size:12px;padding:6px 16px;cursor:pointer;">RESET NOW</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script src="js/network.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/renderer.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>
