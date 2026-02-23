@@ -20,7 +20,9 @@ public class AIPlayerController
     private readonly Dictionary<string, long> _lastShotTick = new();
     private readonly Dictionary<string, long> _spawnTick = new();
     private long _currentTick;
+    private DateTime _lastCheckpoint = DateTime.UtcNow;
     private const int ShootCooldownTicks = 10;
+    private const int CheckpointIntervalSeconds = 30;
     private const int ExplorationGridSize = 40; // 4000/40 = 100 cells per axis, 10000 total
     private double _resetAtScore = 5000;
 
@@ -66,6 +68,7 @@ public class AIPlayerController
     {
         _currentTick = currentTick;
         CleanupDeadBots();
+        CheckpointLiveBots();
         MaintainBotCount();
         UpdateBots(currentTick);
         return CheckScoreThreshold();
@@ -403,6 +406,26 @@ public class AIPlayerController
 
     public void SaveGenomes() => _ga.Save();
     public object GetFitnessStats() => _ga.GetStats();
+
+    // Report fitness for live bots every 30s so long-surviving genomes stay relevant in the pool
+    private void CheckpointLiveBots()
+    {
+        if ((DateTime.UtcNow - _lastCheckpoint).TotalSeconds < CheckpointIntervalSeconds)
+            return;
+        _lastCheckpoint = DateTime.UtcNow;
+
+        var liveBots = _playerRepository.GetAll()
+            .Where(p => p.IsAI && p.IsAlive && p.OwnerId == null)
+            .ToList();
+
+        foreach (var player in liveBots)
+        {
+            if (!_brains.TryGetValue(player.Id, out var brain)) continue;
+            var score = (double)player.Score;
+            var playerMassEaten = player.MassEatenFromPlayers;
+            _ga.ReportFitness(brain.GetGenome(), ComputeFitness(player.Id, score, playerMassEaten));
+        }
+    }
 
     private void CleanupDeadBots()
     {

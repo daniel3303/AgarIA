@@ -103,11 +103,12 @@ The AI evolves through a genetic algorithm with a pool of **50 genomes**:
 - **Selection**: Tournament selection (pick 3 random, keep the fittest)
 - **Crossover**: 70% chance — each weight randomly inherited from either parent
 - **Mutation**: 10% chance per weight — Gaussian noise (sigma = 0.3)
-- **Pool management**: When pool exceeds 50, the lowest-fitness genome is removed
+- **Pool management**: When pool exceeds 50, the lowest-fitness genome is removed. Duplicate genomes are prevented — if a genome already exists in the pool, only the higher fitness is kept
+- **Live checkpoints**: Every 30 seconds, all live bots report their current fitness to the pool. This ensures long-surviving dominant bots keep their genomes competitive without waiting until death
 
 #### Fitness Decay
 
-Every 30 seconds, all existing pool entries are multiplied by **0.95**. This prevents old genomes that scored high when competition was weak from permanently dominating the pool. After 5 minutes a genome's stored fitness is at ~60%, after 15 minutes ~21%, forcing gradual turnover while keeping scores meaningful during gameplay.
+Every 30 seconds, all existing pool entries are multiplied by **0.95**. This prevents old genomes that scored high when competition was weak from permanently dominating the pool. After 5 minutes a genome's stored fitness is at ~60%, after 15 minutes ~21%, forcing gradual turnover while keeping scores meaningful during gameplay. Live bot checkpoints counterbalance this decay — a bot that keeps growing will keep refreshing its genome's fitness in the pool.
 
 ### Fitness Function
 
@@ -135,13 +136,3 @@ Evolved neural network weights auto-save to `ai_genomes.json` every 60 seconds. 
 - **Real-time**: SignalR WebSockets
 - **Frontend**: Vanilla JavaScript, HTML5 Canvas
 - **AI**: Custom neural network + genetic algorithm (no ML frameworks)
-
-## Project Structure
-
-```
-AgarIA.Web            → ASP.NET Core host, static frontend
-AgarIA.Core.Game      → Game engine (20 tick/s loop), collision detection, SignalR hub
-AgarIA.Core.AI        → AI controller, neural network, genetic algorithm
-AgarIA.Core.Repositories → In-memory data access (ConcurrentDictionary)
-AgarIA.Core.Data      → Domain models (Player, Food, Projectile, GameConfig)
-```

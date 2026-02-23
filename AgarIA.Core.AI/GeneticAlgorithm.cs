@@ -59,7 +59,17 @@ public class GeneticAlgorithm
                 _lastDecay = DateTime.UtcNow;
             }
 
-            _pool.Add((genome, fitness));
+            // If this exact genome is already in the pool, keep only the higher fitness
+            var existingIdx = _pool.FindIndex(p => ReferenceEquals(p.Genome, genome));
+            if (existingIdx >= 0)
+            {
+                if (fitness > _pool[existingIdx].Fitness)
+                    _pool[existingIdx] = (genome, fitness);
+            }
+            else
+            {
+                _pool.Add((genome, fitness));
+            }
 
             if (_pool.Count > PoolCapacity)
             {
