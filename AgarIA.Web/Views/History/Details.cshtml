@@ -1,0 +1,43 @@
+@model GameRound
+
+<div class="mb-4">
+    <a asp-action="Index" class="btn btn-ghost btn-sm">← Back to History</a>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Duration</div>
+        <div class="stat-value text-lg">@TimeSpan.FromSeconds(Model.DurationTicks / 20.0).ToString(@"mm\:ss")</div>
+    </div>
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Players</div>
+        <div class="stat-value text-lg">@Model.PlayerCount</div>
+        <div class="stat-desc">@Model.AiPlayerCount AI</div>
+    </div>
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Total Mass</div>
+        <div class="stat-value text-lg">@((int)Model.TotalMass)</div>
+    </div>
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Ended</div>
+        <div class="stat-value text-sm">@Model.EndedAt.ToString("g")</div>
+    </div>
+</div>
+
+<h3 class="text-lg font-bold mb-4">Player Stats</h3>
+
+@(Html.Grid(Model.PlayerStats.OrderByDescending(s => s.FinalScore).AsQueryable()).Build(columns => {
+    columns.Add(m => m.Username).Titled("Player");
+    columns.Add(m => m.IsAI).Titled("Type")
+        .RenderedAs(m => m.IsAI
+            ? "<span class=\"badge badge-neutral badge-sm\">AI</span>"
+            : "<span class=\"badge badge-ghost badge-sm\">Human</span>")
+        .Encoded(false);
+    columns.Add(m => m.FinalScore).Titled("Score");
+    columns.Add(m => m.TotalMass).Titled("Mass")
+        .RenderedAs(m => ((int)m.TotalMass).ToString());
+    columns.Add(m => m.FoodEaten).Titled("Food Eaten");
+    columns.Add(m => m.PlayersKilled).Titled("Kills");
+    columns.Add(m => m.PlayerMassEaten).Titled("Player Mass Eaten")
+        .RenderedAs(m => ((int)m.PlayerMassEaten).ToString());
+}).Empty("No player stats.").Sortable())

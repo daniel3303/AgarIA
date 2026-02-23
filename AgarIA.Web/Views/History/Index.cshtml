@@ -1,0 +1,12 @@
+@model IQueryable<GameRound>
+
+@(Html.Grid(Model).Build(columns => {
+    columns.Add(m => m.EndedAt).Titled("Ended").Formatted("{0:g}");
+    columns.Add(m => m.DurationTicks).Titled("Duration")
+        .RenderedAs(m => TimeSpan.FromSeconds(m.DurationTicks / 20.0).ToString(@"mm\:ss"));
+    columns.Add(m => m.PlayerCount).Titled("Players");
+    columns.Add(m => m.AiPlayerCount).Titled("AI Players");
+    columns.Add(m => m.TotalMass).Titled("Total Mass")
+        .RenderedAs(m => ((int)m.TotalMass).ToString());
+    columns.AddActions(a => a.AddShow(action: "Details"));
+}).Using(GridFilterMode.Excel).Empty("No game rounds recorded yet.").Sortable().Pageable())

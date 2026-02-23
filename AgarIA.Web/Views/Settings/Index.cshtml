@@ -1,0 +1,75 @@
+@using AgarIA.Core.Data.Models
+@model GameSettings
+
+<div class="card bg-base-100 shadow-sm">
+    <div class="card-body">
+        <h2 class="card-title mb-4">Game Settings</h2>
+
+        <form asp-action="Update">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Min AI Players</legend>
+                    <input type="number" asp-for="MinAIPlayers" class="input w-full" min="0" max="500" />
+                </fieldset>
+
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Max AI Players</legend>
+                    <input type="number" asp-for="MaxAIPlayers" class="input w-full" min="0" max="500" />
+                </fieldset>
+
+                <fieldset class="fieldset col-span-full">
+                    <legend class="fieldset-legend">Reset Type</legend>
+                    <div class="flex gap-4">
+                        @foreach (var rt in Enum.GetValues<ResetType>())
+                        {
+                            <label class="label cursor-pointer gap-2">
+                                <input type="radio" name="ResetType" value="@rt" class="radio"
+                                       checked="@(Model.ResetType == rt)" data-reset-type="@rt" />
+                                <span>@rt</span>
+                            </label>
+                        }
+                    </div>
+                </fieldset>
+
+                <fieldset class="fieldset reset-field" data-for="MaxScore">
+                    <legend class="fieldset-legend">Reset at Score</legend>
+                    <input type="number" asp-for="ResetAtScore" class="input w-full" min="100" step="100" />
+                </fieldset>
+
+                <fieldset class="fieldset reset-field" data-for="MaxTime">
+                    <legend class="fieldset-legend">Auto Reset (seconds)</legend>
+                    <input type="number" asp-for="AutoResetSeconds" class="input w-full" min="0" />
+                </fieldset>
+
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Max Speed</legend>
+                    <input type="checkbox" asp-for="MaxSpeed" class="toggle" />
+                </fieldset>
+            </div>
+
+            <div class="mt-6 flex gap-2">
+                <button type="submit" class="btn btn-neutral">Save Settings</button>
+            </div>
+        </form>
+
+        <div class="divider"></div>
+
+        <form asp-action="ResetGame">
+            <button type="submit" class="btn btn-error" onclick="return confirm('Reset the game now?')">Reset Game Now</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    // Toggle visibility of reset-specific fields based on selected reset type
+    function updateResetFields() {
+        const selected = document.querySelector('input[name="ResetType"]:checked')?.value;
+        document.querySelectorAll('.reset-field').forEach(el => {
+            el.style.display = el.dataset.for === selected ? '' : 'none';
+        });
+    }
+
+    document.querySelectorAll('input[name="ResetType"]').forEach(r =>
+        r.addEventListener('change', updateResetFields));
+    updateResetFields();
+</script>

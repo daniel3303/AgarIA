@@ -1,0 +1,214 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+@source "../../Views";
+@source "../../TagHelpers";
+@source inline("size-1 size-2 size-3 size-4 size-5 size-6 size-7 size-8 !hidden");
+
+/* ================================================
+   MVC GRID
+   ================================================ */
+
+.mvc-grid {
+  @apply relative overflow-x-auto leading-normal;
+}
+
+.mvc-grid .table th,
+.mvc-grid .table td {
+  @apply align-middle;
+}
+
+.mvc-grid .table .table-td-content {
+  @apply max-w-xs h-fit flex;
+}
+
+.mvc-grid th.sortable {
+  @apply cursor-pointer select-none;
+}
+
+.mvc-grid .mvc-grid-sort {
+  @apply text-base-content/50;
+}
+
+.mvc-grid th.asc .mvc-grid-sort,
+.mvc-grid th.desc .mvc-grid-sort {
+  @apply text-base-content;
+}
+
+.mvc-grid .mvc-grid-sort .sort-asc,
+.mvc-grid .mvc-grid-sort .sort-desc {
+  @apply hidden;
+}
+
+.mvc-grid .mvc-grid-sort .sort-none {
+  @apply inline-flex;
+}
+
+.mvc-grid .asc .mvc-grid-sort .sort-none,
+.mvc-grid .desc .mvc-grid-sort .sort-none {
+  @apply hidden;
+}
+
+.mvc-grid .asc .mvc-grid-sort .sort-asc {
+  @apply inline-flex text-base-content;
+}
+
+.mvc-grid .desc .mvc-grid-sort .sort-desc {
+  @apply inline-flex text-base-content;
+}
+
+.mvc-grid tr.totals td {
+  @apply bg-base-200 text-base-content/60 font-semibold italic;
+}
+
+.mvc-grid-hidden {
+  @apply hidden;
+}
+
+.mvc-grid-table {
+  overflow-y: auto;
+}
+
+.mvc-grid-table > table {
+  @apply border-collapse max-w-full w-full;
+}
+
+.mvc-grid-table > table > thead > tr > th {
+  @apply bg-base-200 relative;
+  background-clip: padding-box;
+}
+
+.mvc-grid-table > table > thead > tr > th,
+.mvc-grid-table > table > tbody > tr > td,
+.mvc-grid-table > table > tfoot > tr > td {
+  @apply border border-base-300 p-2;
+}
+
+.mvc-grid-table .sortable {
+  @apply cursor-pointer;
+}
+
+.mvc-grid-options {
+  @apply hidden;
+}
+
+.mvc-grid-title {
+  @apply inline-block flex-1;
+}
+
+.mvc-grid-sort,
+.mvc-grid-filter {
+  @apply border-none cursor-pointer transition-colors flex-shrink-0;
+}
+
+.mvc-grid-row-filters .filterable {
+  @apply p-1;
+}
+
+.mvc-grid-row-filters th div {
+  @apply flex;
+}
+
+.mvc-grid-row-filters .mvc-grid-value {
+  @apply border border-base-300 bg-base-100 flex-1 mr-1 px-2 font-medium;
+}
+
+.mvc-grid-row-filters .mvc-grid-value.invalid {
+  @apply border-error outline-error;
+}
+
+.mvc-grid-row-filters .mvc-grid-filter {
+  @apply border border-base-300 static h-8 w-8;
+}
+
+.mvc-grid-popup {
+  @apply absolute bg-base-100 border border-base-300 rounded-box shadow-lg z-[1100] m-4 min-w-48;
+}
+
+.mvc-grid-popup .popup-content {
+  @apply p-2;
+}
+
+.mvc-grid-popup .popup-actions {
+  @apply text-center py-2;
+}
+
+.mvc-grid-popup .mvc-grid-value,
+.mvc-grid-popup .mvc-grid-method,
+.mvc-grid-popup .mvc-grid-operator {
+  @apply input input-sm w-full;
+}
+
+.mvc-grid-popup .mvc-grid-apply {
+  @apply btn btn-neutral btn-sm mr-1;
+}
+
+.mvc-grid-popup .mvc-grid-cancel {
+  @apply btn btn-ghost btn-sm ml-1;
+}
+
+.mvc-grid-pager,
+.mvc-grid-empty-row {
+  @apply text-center;
+}
+
+.mvc-grid-pager button {
+  @apply btn btn-sm btn-ghost border border-base-300 min-w-8 mx-0.5;
+}
+
+.mvc-grid-pager .active {
+  @apply btn-neutral border-neutral;
+}
+
+.mvc-grid-pager [disabled] {
+  @apply btn-disabled;
+}
+
+.mvc-grid-page-sizes {
+  @apply inline-block ml-2;
+}
+
+.mvc-grid-loader {
+  @apply mx-auto h-6 w-6;
+}
+
+.mvc-grid-spinner {
+  @apply animate-spin border-2 border-base-300 border-t-base-content rounded-full h-full w-full;
+}
+
+/* Grid actions */
+.grid-actions {
+  @apply flex items-center gap-0.5;
+}
+
+.grid-action-btn {
+  @apply p-1.5 rounded-lg text-base-content/40 hover:text-base-content hover:bg-base-content/10 transition-colors cursor-pointer inline-flex items-center relative;
+  @apply bg-transparent border border-base-300;
+}
+
+.grid-action-btn.grid-action-danger {
+  @apply hover:text-error hover:bg-error/10;
+}
+
+.grid-action-btn.grid-action-warning {
+  @apply hover:text-warning hover:bg-warning/10;
+}
+
+.grid-action-btn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  @apply absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 text-xs font-medium rounded-md shadow-lg whitespace-nowrap;
+  @apply bg-neutral text-neutral-content;
+  @apply opacity-0 invisible transition-all duration-150 pointer-events-none;
+}
+
+.grid-action-btn[data-tooltip]:hover::after {
+  @apply opacity-100 visible;
+}
+
+.mvc-grid tbody tr:hover {
+  @apply bg-base-content/5;
+}
+
+.form-confirm.inline {
+  @apply inline;
+}
