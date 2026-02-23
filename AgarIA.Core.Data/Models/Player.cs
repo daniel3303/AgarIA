@@ -21,4 +21,6 @@ public class Player
     public string KilledById { get; set; }
     public double KillerMassShare { get; set; }
     public double MassEatenFromPlayers { get; set; }
+    public int FoodEaten { get; set; }
+    public int PlayersKilled { get; set; }
 }

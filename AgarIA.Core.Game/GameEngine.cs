@@ -17,6 +17,8 @@ public class GameEngine : IHostedService, IDisposable
     private readonly AIPlayerController _aiController;
     private readonly IHubContext<GameHub, IGameHub> _hubContext;
     private readonly ILogger<GameEngine> _logger;
+    private readonly GameSettings _gameSettings;
+    private readonly IGameResetHandler _resetHandler;
     private Timer _gameTimer;
     private Timer _leaderboardTimer;
     private readonly Random _random = new();
@@ -27,6 +29,7 @@ public class GameEngine : IHostedService, IDisposable
     private int _tickRunning;
     private long _resetIntervalTicks;
     private long _lastResetTick;
+    private long _roundStartTick;
     private readonly List<object> _resetScoreHistory = new();
 
     public GameEngine(
@@ -37,7 +40,9 @@ public class GameEngine : IHostedService, IDisposable
         CollisionManager collisionManager,
         AIPlayerController aiController,
         IHubContext<GameHub, IGameHub> hubContext,
-        ILogger<GameEngine> logger)
+        ILogger<GameEngine> logger,
+        GameSettings gameSettings,
+        IGameResetHandler resetHandler = null)
     {
         _gameState = gameState;
         _playerRepository = playerRepository;
@@ -47,6 +52,8 @@ public class GameEngine : IHostedService, IDisposable
         _aiController = aiController;
         _hubContext = hubContext;
         _logger = logger;
+        _gameSettings = gameSettings;
+        _resetHandler = resetHandler;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -92,10 +99,11 @@ public class GameEngine : IHostedService, IDisposable
             HandleMerges();
             DecayMass();
             SpawnFood();
-            var shouldReset = _aiController.Tick(_gameState.CurrentTick);
+            var scoreTriggered = _aiController.Tick(_gameState.CurrentTick);
             BroadcastGameState();
-            if (shouldReset) _resetRequested = true;
-            if (_resetIntervalTicks > 0 && _gameState.CurrentTick - _lastResetTick >= _resetIntervalTicks)
+            if (_gameSettings.ResetType == ResetType.MaxScore && scoreTriggered)
+                _resetRequested = true;
+            if (_gameSettings.ResetType == ResetType.MaxTime && _resetIntervalTicks > 0 && _gameState.CurrentTick - _lastResetTick >= _resetIntervalTicks)
                 _resetRequested = true;
         }
         catch (Exception ex)
@@ -145,6 +153,7 @@ public class GameEngine : IHostedService, IDisposable
         {
             _foodRepository.Remove(food.Id);
             eater.Mass += GameConfig.FoodMass;
+            eater.FoodEaten++;
 
             eater.SpeedBoostMultiplier = 1.0 + (GameConfig.FoodMass / eater.Mass) * GameConfig.SpeedBoostScaleFactor;
             eater.SpeedBoostUntil = _gameState.CurrentTick + GameConfig.SpeedBoostDuration;
@@ -158,6 +167,7 @@ public class GameEngine : IHostedService, IDisposable
         {
             eater.Mass += prey.Mass;
             eater.MassEatenFromPlayers += prey.Mass;
+            eater.PlayersKilled++;
             eater.SpeedBoostUntil = _gameState.CurrentTick + GameConfig.SpeedBoostDuration;
             prey.IsAlive = false;
 
@@ -440,6 +450,7 @@ public class GameEngine : IHostedService, IDisposable
 
     public void SetAutoResetSeconds(int seconds)
     {
+        _gameSettings.AutoResetSeconds = seconds;
         _resetIntervalTicks = seconds * GameConfig.TickRate;
         _lastResetTick = _gameState.CurrentTick;
         _logger.LogInformation("Auto reset set to {Seconds}s ({Ticks} ticks)", seconds, _resetIntervalTicks);
@@ -447,6 +458,7 @@ public class GameEngine : IHostedService, IDisposable
 
     public void SetMaxSpeed(bool enabled)
     {
+        _gameSettings.MaxSpeed = enabled;
         _maxSpeed = enabled;
         var interval = enabled ? 1 : 1000 / GameConfig.TickRate;
         _gameTimer?.Change(0, interval);
@@ -472,6 +484,19 @@ public class GameEngine : IHostedService, IDisposable
             }
         }
 
+        // Capture game history before clearing players
+        try
+        {
+            _resetHandler?.OnBeforeReset(
+                _playerRepository.GetAlive().ToList(),
+                _roundStartTick,
+                _gameState.CurrentTick);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving game history on reset");
+        }
+
         foreach (var player in _playerRepository.GetAlive().ToList())
         {
             player.IsAlive = false;
@@ -487,6 +512,7 @@ public class GameEngine : IHostedService, IDisposable
         }
         SpawnInitialFood();
         _lastResetTick = _gameState.CurrentTick;
+        _roundStartTick = _gameState.CurrentTick;
         _aiController.RandomizePlayerCount();
         _aiController.SaveGenomes();
         _logger.LogInformation("Game reset performed");
