@@ -23,5 +23,7 @@ public class PlayerGameStat
 
     public double PlayerMassEaten { get; set; }
 
+    public double ProjectileMassGained { get; set; }
+
     public GameRound GameRound { get; set; }
 }

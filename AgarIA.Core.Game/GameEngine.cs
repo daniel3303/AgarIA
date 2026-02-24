@@ -362,6 +362,7 @@ public class GameEngine : IHostedService, IDisposable
             if (shooter != null && shooter.IsAlive)
             {
                 shooter.Mass += reward;
+                shooter.ProjectileMassGained += reward;
             }
 
             var food = new FoodItem

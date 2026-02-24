@@ -40,4 +40,6 @@
     columns.Add(m => m.PlayersKilled).Titled("Kills");
     columns.Add(m => m.PlayerMassEaten).Titled("Player Mass Eaten")
         .RenderedAs(m => ((int)m.PlayerMassEaten).ToString());
+    columns.Add(m => m.ProjectileMassGained).Titled("Projectile Mass")
+        .RenderedAs(m => ((int)m.ProjectileMassGained).ToString());
 }).Empty("No player stats.").Sortable())
