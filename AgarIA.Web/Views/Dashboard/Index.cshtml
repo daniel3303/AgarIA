@@ -1,30 +1,77 @@
 @model AgarIA.Web.ViewModels.DashboardViewModel
 
 <!-- Live game stats cards -->
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+<div id="stats-cards" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Game Speed</div>
+        <div class="stat-value text-lg">
+            <span id="stat-tps">@Model.TicksPerSecond</span> TPS
+        </div>
+        <div class="stat-desc">
+            <span id="stat-multiplier">@Model.SpeedMultiplier.ToString("0.#")</span>x speed
+            @if (Model.MaxSpeed) {
+                <span class="badge badge-warning badge-xs ml-1">MAX</span>
+            }
+        </div>
+    </div>
     <div class="stat bg-base-100 shadow rounded-box">
         <div class="stat-title">Current Tick</div>
-        <div class="stat-value text-lg">@Model.CurrentTick</div>
+        <div class="stat-value text-lg" id="stat-tick">@Model.CurrentTick</div>
     </div>
     <div class="stat bg-base-100 shadow rounded-box">
         <div class="stat-title">Total Players</div>
-        <div class="stat-value text-lg">@Model.TotalPlayers</div>
-        <div class="stat-desc">@Model.HumanPlayers human / @Model.AiPlayers AI</div>
+        <div class="stat-value text-lg" id="stat-players">@Model.TotalPlayers</div>
+        <div class="stat-desc"><span id="stat-human">@Model.HumanPlayers</span> human / <span id="stat-ai">@Model.AiPlayers</span> AI</div>
     </div>
     <div class="stat bg-base-100 shadow rounded-box">
         <div class="stat-title">Food Items</div>
-        <div class="stat-value text-lg">@Model.FoodCount</div>
+        <div class="stat-value text-lg" id="stat-food">@Model.FoodCount</div>
     </div>
     <div class="stat bg-base-100 shadow rounded-box">
         <div class="stat-title">Top Score</div>
-        <div class="stat-value text-lg">@Model.TopScore</div>
+        <div class="stat-value text-lg" id="stat-score">@Model.TopScore</div>
+    </div>
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Spectators</div>
+        <div class="stat-value text-lg" id="stat-spectators">@Model.Spectators</div>
     </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div class="stat bg-base-100 shadow rounded-box">
-        <div class="stat-title">Spectators</div>
-        <div class="stat-value text-lg">@Model.Spectators</div>
+<!-- Genome fitness tables -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <!-- Easy pool -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4">
+            <h3 class="card-title text-base">Easy (1-layer)</h3>
+            <div id="fitness-easy-empty" class="text-base-content/50 text-sm py-4 text-center">No data yet</div>
+            <table id="fitness-easy-table" class="table table-zebra table-sm hidden">
+                <thead>
+                    <tr>
+                        <th class="w-12">#</th>
+                        <th>Fitness Score</th>
+                    </tr>
+                </thead>
+                <tbody id="fitness-easy-body"></tbody>
+            </table>
+            <div id="fitness-easy-summary" class="text-sm text-base-content/70 mt-2 hidden"></div>
+        </div>
+    </div>
+    <!-- Medium pool -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4">
+            <h3 class="card-title text-base">Medium (2-layer)</h3>
+            <div id="fitness-medium-empty" class="text-base-content/50 text-sm py-4 text-center">No data yet</div>
+            <table id="fitness-medium-table" class="table table-zebra table-sm hidden">
+                <thead>
+                    <tr>
+                        <th class="w-12">#</th>
+                        <th>Fitness Score</th>
+                    </tr>
+                </thead>
+                <tbody id="fitness-medium-body"></tbody>
+            </table>
+            <div id="fitness-medium-summary" class="text-sm text-base-content/70 mt-2 hidden"></div>
+        </div>
     </div>
 </div>
 
@@ -53,4 +100,68 @@
             </tbody>
         </table>
     </div>
+}
+
+@section Scripts {
+    <script>
+        // Auto-refresh dashboard stats every 2 seconds without full page reload
+        (function () {
+            const statsUrl = '@Url.Action("Stats")';
+
+            async function refreshStats() {
+                try {
+                    const res = await fetch(statsUrl);
+                    if (!res.ok) return;
+                    const d = await res.json();
+
+                    // Update stat card values
+                    document.getElementById('stat-tps').textContent = d.ticksPerSecond;
+                    document.getElementById('stat-multiplier').textContent = d.speedMultiplier;
+                    document.getElementById('stat-tick').textContent = d.currentTick;
+                    document.getElementById('stat-players').textContent = d.totalPlayers;
+                    document.getElementById('stat-human').textContent = d.humanPlayers;
+                    document.getElementById('stat-ai').textContent = d.aiPlayers;
+                    document.getElementById('stat-food').textContent = d.foodCount;
+                    document.getElementById('stat-score').textContent = d.topScore;
+                    document.getElementById('stat-spectators').textContent = d.spectators;
+                    // Update fitness tables for each pool
+                    if (d.fitnessStats) {
+                        updateFitnessTable('easy', d.fitnessStats.easy);
+                        updateFitnessTable('medium', d.fitnessStats.medium);
+                    }
+                } catch (e) {
+                    // Silently ignore fetch errors
+                }
+            }
+
+            // Populate a fitness pool table with top-10 scores and summary stats
+            function updateFitnessTable(pool, data) {
+                var empty = document.getElementById('fitness-' + pool + '-empty');
+                var table = document.getElementById('fitness-' + pool + '-table');
+                var body = document.getElementById('fitness-' + pool + '-body');
+                var summary = document.getElementById('fitness-' + pool + '-summary');
+
+                if (!data) {
+                    empty.classList.remove('hidden');
+                    table.classList.add('hidden');
+                    summary.classList.add('hidden');
+                    return;
+                }
+
+                empty.classList.add('hidden');
+                table.classList.remove('hidden');
+                summary.classList.remove('hidden');
+
+                body.innerHTML = data.top10.map(function (score, i) {
+                    return '<tr><td>' + (i + 1) + '</td><td>' + score.toFixed(1) + '</td></tr>';
+                }).join('');
+
+                summary.textContent = 'Avg: ' + data.average.toFixed(1)
+                    + ' · Median: ' + data.median.toFixed(1)
+                    + ' · Pool: ' + data.poolSize;
+            }
+
+            setInterval(refreshStats, 2000);
+        })();
+    </script>
 }

@@ -11,5 +11,8 @@ public class DashboardViewModel
     public int FoodCount { get; set; }
     public int TopScore { get; set; }
     public int Spectators { get; set; }
+    public int TicksPerSecond { get; set; }
+    public double SpeedMultiplier { get; set; }
+    public bool MaxSpeed { get; set; }
     public List<GameRound> RecentRounds { get; set; } = [];
 }

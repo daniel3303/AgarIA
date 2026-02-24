@@ -7,6 +7,7 @@ const Network = (() => {
     let onReconnected = null;
     let onFitnessStats = null;
     let onResetScores = null;
+    let onBotViewUpdate = null;
 
     // Build SignalR connection to game hub
     function init(callbacks) {
@@ -16,6 +17,7 @@ const Network = (() => {
         onReconnected = callbacks.onReconnected;
         onFitnessStats = callbacks.onFitnessStats;
         onResetScores = callbacks.onResetScores;
+        onBotViewUpdate = callbacks.onBotViewUpdate;
 
         connection = new signalR.HubConnectionBuilder()
             .withUrl("/gamehub")
@@ -43,6 +45,11 @@ const Network = (() => {
         // Receive top scores from the last reset
         connection.on("ResetScores", (data) => {
             if (onResetScores) onResetScores(data);
+        });
+
+        // Receive bot view perception data
+        connection.on("BotViewUpdate", (data) => {
+            if (onBotViewUpdate) onBotViewUpdate(data);
         });
 
         connection.onreconnected(() => {
@@ -122,5 +129,17 @@ const Network = (() => {
         }
     }
 
-    return { init, join, move, respawn, split, shoot, spectate, reset, setResetAtScore, setMaxSpeed, setAutoResetSeconds };
+    function enableBotView(botId) {
+        if (connection && connection.state === signalR.HubConnectionState.Connected) {
+            connection.invoke("EnableBotView", botId).catch(e => console.error("EnableBotView failed", e));
+        }
+    }
+
+    function disableBotView() {
+        if (connection && connection.state === signalR.HubConnectionState.Connected) {
+            connection.invoke("DisableBotView").catch(e => console.error("DisableBotView failed", e));
+        }
+    }
+
+    return { init, join, move, respawn, split, shoot, spectate, reset, setResetAtScore, setMaxSpeed, setAutoResetSeconds, enableBotView, disableBotView };
 })();
