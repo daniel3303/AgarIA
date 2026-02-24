@@ -9,6 +9,7 @@ An agar.io-style multiplayer cell arena game where AI players evolve using genet
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- [Node.js](https://nodejs.org/) (for building frontend assets)
 
 ### Install & Run
 
@@ -17,10 +18,14 @@ An agar.io-style multiplayer cell arena game where AI players evolve using genet
 git clone https://github.com/daniel3303/AgarIA.git
 cd AgarIA
 
-# Build
-dotnet build AgarIA.slnx
+# Install frontend dependencies and build assets
+cd AgarIA.Web
+npm install
+npm run build
+cd ..
 
-# Run
+# Build and run
+dotnet build AgarIA.slnx
 dotnet run --project AgarIA.Web
 ```
 
