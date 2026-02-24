@@ -25,6 +25,7 @@ public class AIPlayerController : IAIController
     private readonly Dictionary<string, BotDifficulty> _botDifficulty = new();
     private readonly Dictionary<string, long> _lastShotTick = new();
     private readonly Dictionary<string, long> _spawnTick = new();
+    private readonly PlayerVelocityTracker _velocityTracker = new();
     private long _currentTick;
     private DateTime _lastCheckpoint = DateTime.UtcNow.AddSeconds(-15); // Offset from decay by 15s to avoid race
     private const int ShootCooldownTicks = 10;
@@ -79,8 +80,8 @@ public class AIPlayerController : IAIController
         _logger = loggerFactory.CreateLogger<AIPlayerController>();
 
         var gaLogger = loggerFactory.CreateLogger<GeneticAlgorithm>();
-        _gaEasy = new GeneticAlgorithm(gaLogger, "ai_genomes_easy.json", NeuralNetwork.GenomeSizeForLayers(1));
-        _gaMedium = new GeneticAlgorithm(gaLogger, "ai_genomes_medium.json", NeuralNetwork.GenomeSizeForLayers(2));
+        _gaEasy = new GeneticAlgorithm(gaLogger, "ai_genomes_easy.json", NeuralNetwork.GenomeSizeForHidden(64));
+        _gaMedium = new GeneticAlgorithm(gaLogger, "ai_genomes_medium.json", NeuralNetwork.GenomeSizeForHidden(128));
     }
 
     public string GetTickBreakdown()
@@ -126,7 +127,7 @@ public class AIPlayerController : IAIController
             // Spawn whichever tier is underrepresented to maintain 50/50 balance
             var difficulty = easyCount <= mediumCount ? BotDifficulty.Easy : BotDifficulty.Medium;
             if (difficulty == BotDifficulty.Easy) easyCount++; else mediumCount++;
-            var hiddenLayers = difficulty == BotDifficulty.Easy ? 1 : 2;
+            var hiddenSize = difficulty == BotDifficulty.Easy ? 64 : 128;
             var ga = difficulty == BotDifficulty.Easy ? _gaEasy : _gaMedium;
             var prefix = difficulty == BotDifficulty.Easy ? "(E)" : "(M)";
 
@@ -144,7 +145,7 @@ public class AIPlayerController : IAIController
             };
             _playerRepository.Add(player);
 
-            var brain = new NeuralNetwork(hiddenLayers);
+            var brain = new NeuralNetwork(hiddenSize);
             brain.SetGenome(ga.GetGenome());
             _brains[id] = brain;
             _botDifficulty[id] = difficulty;
@@ -161,6 +162,9 @@ public class AIPlayerController : IAIController
         // Use shared grids (rebuilt by CollisionManager earlier in tick)
         var allPlayers = _grids.PlayerGrid.AllItems;
         var allProjectiles = _projectileRepository.GetAlive().ToList();
+
+        // Update velocity tracker before parallel phase
+        _velocityTracker.Update(allPlayers);
 
         // Build owner lookup once — eliminates O(N) GetByOwner scans
         var splitCellsByOwner = new Dictionary<string, List<Player>>();
@@ -214,14 +218,14 @@ public class AIPlayerController : IAIController
             var nearFood = nearbyFoodPerBot[i];
             var nearPlayers = nearbyPlayersPerBot[i];
 
-            // 10 nearest food within 800u (same logic as BuildFeatureVector)
-            var foodSorted = nearFood.OrderBy(f => (f.X - bot.X) * (f.X - bot.X) + (f.Y - bot.Y) * (f.Y - bot.Y)).Take(10).Select(f => f.Id).ToList();
+            // 32 nearest food within 800u (same logic as BuildFeatureVector)
+            var foodSorted = nearFood.OrderBy(f => (f.X - bot.X) * (f.X - bot.X) + (f.Y - bot.Y) * (f.Y - bot.Y)).Take(32).Select(f => f.Id).ToList();
 
-            // 10 nearest players within 1600u (exclude self)
+            // 16 nearest players within 1600u (exclude self)
             var playerSorted = nearPlayers
                 .Where(p => p.Id != bot.Id && p.OwnerId != bot.Id)
                 .OrderBy(p => (p.X - bot.X) * (p.X - bot.X) + (p.Y - bot.Y) * (p.Y - bot.Y))
-                .Take(10).Select(p => p.Id).ToList();
+                .Take(16).Select(p => p.Id).ToList();
 
             // 5 nearest projectiles (from allProjectiles, same as feature vector)
             var projSorted = allProjectiles
@@ -236,7 +240,7 @@ public class AIPlayerController : IAIController
 
         // Phase 1: Build feature vectors in parallel
         ts = Stopwatch.GetTimestamp();
-        const int featureSize = 67;
+        const int featureSize = 161;
         const int outputSize = 6;
         var batchInputs = new double[bots.Count * featureSize];
         var batchNetworks = new NeuralNetwork[bots.Count];
@@ -402,12 +406,16 @@ public class AIPlayerController : IAIController
 
     private double[] BuildFeatureVector(Player bot, List<FoodItem> allFood, List<Player> nearbyPlayers, List<Projectile> allProjectiles, Player secondCell, Player globalLargest)
     {
-        var features = new double[67];
+        var features = new double[161];
         int idx = 0;
 
         var botX = bot.X;
         var botY = bot.Y;
         var largestMass = globalLargest?.Mass ?? bot.Mass;
+
+        // Velocity normalization factor: bot's current speed
+        var botSpeed = GameConfig.BaseSpeed * bot.SpeedBoostMultiplier;
+        if (botSpeed < 0.01) botSpeed = GameConfig.BaseSpeed;
 
         // Own mass relative to largest (1)
         features[idx++] = largestMass > 0 ? bot.Mass / largestMass : 1.0;
@@ -432,9 +440,9 @@ public class AIPlayerController : IAIController
             features[idx++] = 0;
         }
 
-        // 10 nearest food (20) — partial selection instead of full sort
-        const int topFoodK = 10;
-        Span<(double dx, double dy, double distSq)> topFood = stackalloc (double, double, double)[topFoodK];
+        // 32 nearest food (64) — partial selection instead of full sort
+        const int topFoodK = 32;
+        var topFood = new (double dx, double dy, double distSq)[topFoodK];
         int topFoodCount = 0;
 
         for (int i = 0; i < allFood.Count; i++)
@@ -447,17 +455,17 @@ public class AIPlayerController : IAIController
             {
                 topFood[topFoodCount++] = (dx, dy, distSq);
                 if (topFoodCount == topFoodK)
-                    SortSpan(ref topFood);
+                    Array.Sort(topFood, (a, b) => a.distSq.CompareTo(b.distSq));
             }
             else if (distSq < topFood[topFoodK - 1].distSq)
             {
                 topFood[topFoodK - 1] = (dx, dy, distSq);
-                InsertSorted(ref topFood, topFoodK);
+                InsertSortedFood(topFood, topFoodK);
             }
         }
 
         if (topFoodCount < topFoodK)
-            SortSpan(ref topFood, topFoodCount);
+            Array.Sort(topFood, 0, topFoodCount, Comparer<(double dx, double dy, double distSq)>.Create((a, b) => a.distSq.CompareTo(b.distSq)));
 
         for (int i = 0; i < topFoodK; i++)
         {
@@ -472,9 +480,9 @@ public class AIPlayerController : IAIController
             }
         }
 
-        // 10 nearest players (30) — partial selection from grid-queried nearby players
-        const int topPlayerK = 10;
-        var topPlayers = new (double dx, double dy, double distSq, double mass)[topPlayerK];
+        // 16 nearest players (80) — dx, dy, mass, vx, vy
+        const int topPlayerK = 16;
+        var topPlayers = new (double dx, double dy, double distSq, double mass, string id)[topPlayerK];
         int topPlayerCount = 0;
 
         foreach (var p in nearbyPlayers)
@@ -487,19 +495,19 @@ public class AIPlayerController : IAIController
 
             if (topPlayerCount < topPlayerK)
             {
-                topPlayers[topPlayerCount++] = (dx, dy, distSq, p.Mass);
+                topPlayers[topPlayerCount++] = (dx, dy, distSq, p.Mass, p.Id);
                 if (topPlayerCount == topPlayerK)
                     Array.Sort(topPlayers, (a, b) => a.distSq.CompareTo(b.distSq));
             }
             else if (distSq < topPlayers[topPlayerK - 1].distSq)
             {
-                topPlayers[topPlayerK - 1] = (dx, dy, distSq, p.Mass);
+                topPlayers[topPlayerK - 1] = (dx, dy, distSq, p.Mass, p.Id);
                 InsertSortedPlayers(topPlayers, topPlayerK);
             }
         }
 
         if (topPlayerCount < topPlayerK)
-            Array.Sort(topPlayers, 0, topPlayerCount, Comparer<(double dx, double dy, double distSq, double mass)>.Create((a, b) => a.distSq.CompareTo(b.distSq)));
+            Array.Sort(topPlayers, 0, topPlayerCount, Comparer<(double dx, double dy, double distSq, double mass, string id)>.Create((a, b) => a.distSq.CompareTo(b.distSq)));
 
         for (int i = 0; i < topPlayerK; i++)
         {
@@ -508,10 +516,13 @@ public class AIPlayerController : IAIController
                 features[idx++] = topPlayers[i].dx / GameConfig.MapSize;
                 features[idx++] = topPlayers[i].dy / GameConfig.MapSize;
                 features[idx++] = largestMass > 0 ? topPlayers[i].mass / largestMass : 0.0;
+                var (vx, vy) = _velocityTracker.GetVelocity(topPlayers[i].id);
+                features[idx++] = vx / botSpeed;
+                features[idx++] = vy / botSpeed;
             }
             else
             {
-                idx += 3;
+                idx += 5;
             }
         }
 
@@ -587,7 +598,19 @@ public class AIPlayerController : IAIController
         }
     }
 
-    private static void InsertSortedPlayers((double dx, double dy, double distSq, double mass)[] arr, int len)
+    private static void InsertSortedFood((double dx, double dy, double distSq)[] arr, int len)
+    {
+        for (int i = len - 1; i > 0; i--)
+        {
+            if (arr[i].distSq < arr[i - 1].distSq)
+            {
+                (arr[i], arr[i - 1]) = (arr[i - 1], arr[i]);
+            }
+            else break;
+        }
+    }
+
+    private static void InsertSortedPlayers((double dx, double dy, double distSq, double mass, string id)[] arr, int len)
     {
         for (int i = len - 1; i > 0; i--)
         {
@@ -689,6 +712,7 @@ public class AIPlayerController : IAIController
             _botDifficulty.Remove(id);
             _spawnTick.Remove(id);
             _lastShotTick.Remove(id);
+            _velocityTracker.Remove(id);
 
             // Remove split cells
             if (splitCellsByOwner.TryGetValue(id, out var cells))

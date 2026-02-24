@@ -4,115 +4,73 @@ namespace AgarIA.Core.AI;
 
 public class NeuralNetwork
 {
-    private const int InputSize = 67;
-    private const int HiddenSize = 64;
+    public const int InputSize = 161;
     private const int OutputSize = 6;
+    private const int MaxHiddenSize = 128;
 
-    public int HiddenLayers { get; }
+    public int HiddenSize { get; }
 
-    public static int GenomeSizeForLayers(int hiddenLayers) => hiddenLayers switch
-    {
-        1 => (InputSize * HiddenSize + HiddenSize) + (HiddenSize * OutputSize + OutputSize),
-        2 => (InputSize * HiddenSize + HiddenSize) + (HiddenSize * HiddenSize + HiddenSize) + (HiddenSize * OutputSize + OutputSize),
-        _ => throw new ArgumentException($"Unsupported hiddenLayers: {hiddenLayers}")
-    };
+    public static int GenomeSizeForHidden(int hiddenSize) =>
+        (InputSize * hiddenSize + hiddenSize) + (hiddenSize * OutputSize + OutputSize);
 
     // Transposed weights: [outputNeuron * inputSize + inputNeuron] for cache-friendly dot products
-    private readonly double[] _wIH = new double[HiddenSize * InputSize];
-    private readonly double[] _bH1 = new double[HiddenSize];
-    private readonly double[] _wHH = new double[HiddenSize * HiddenSize];
-    private readonly double[] _bH2 = new double[HiddenSize];
-    private readonly double[] _wHO = new double[OutputSize * HiddenSize];
-    private readonly double[] _bO = new double[OutputSize];
+    private readonly double[] _wIH;
+    private readonly double[] _bH1;
+    private readonly double[] _wHO;
+    private readonly double[] _bO;
     private double[] _originalGenome;
 
-    public NeuralNetwork(int hiddenLayers = 2)
+    public NeuralNetwork(int hiddenSize = 64)
     {
-        if (hiddenLayers is not (1 or 2))
-            throw new ArgumentException($"Unsupported hiddenLayers: {hiddenLayers}");
-        HiddenLayers = hiddenLayers;
+        if (hiddenSize < 1)
+            throw new ArgumentException($"Unsupported hiddenSize: {hiddenSize}");
+        HiddenSize = hiddenSize;
+        _wIH = new double[hiddenSize * InputSize];
+        _bH1 = new double[hiddenSize];
+        _wHO = new double[OutputSize * hiddenSize];
+        _bO = new double[OutputSize];
     }
 
-    /// <summary>
-    /// Single forward pass for this network instance.
-    /// </summary>
     public double[] Forward(double[] input)
     {
         var hidden1 = new double[HiddenSize];
         var output = new double[OutputSize];
 
-        // Layer 1
         for (int h = 0; h < HiddenSize; h++)
             hidden1[h] = _bH1[h] + TensorPrimitives.Dot<double>(input, _wIH.AsSpan(h * InputSize, InputSize));
         TensorPrimitives.Tanh<double>(hidden1, hidden1);
 
-        double[] lastHidden;
-        if (HiddenLayers == 2)
-        {
-            var hidden2 = new double[HiddenSize];
-            for (int h2 = 0; h2 < HiddenSize; h2++)
-                hidden2[h2] = _bH2[h2] + TensorPrimitives.Dot<double>(hidden1, _wHH.AsSpan(h2 * HiddenSize, HiddenSize));
-            TensorPrimitives.Tanh<double>(hidden2, hidden2);
-            lastHidden = hidden2;
-        }
-        else
-        {
-            lastHidden = hidden1;
-        }
-
-        // Output layer
         for (int o = 0; o < OutputSize; o++)
-            output[o] = _bO[o] + TensorPrimitives.Dot<double>(lastHidden, _wHO.AsSpan(o * HiddenSize, HiddenSize));
+            output[o] = _bO[o] + TensorPrimitives.Dot<double>(hidden1, _wHO.AsSpan(o * HiddenSize, HiddenSize));
 
         return output;
     }
 
     [ThreadStatic] private static double[] t_h1;
-    [ThreadStatic] private static double[] t_h2;
 
-    /// <summary>
-    /// Batched forward pass: runs multiple inputs through multiple networks in one call.
-    /// inputs: flat array [batchSize * InputSize], networks: array of NeuralNetwork (one per bot).
-    /// outputs: flat array [batchSize * OutputSize], pre-allocated by caller.
-    /// </summary>
     public static void BatchForward(double[] inputs, NeuralNetwork[] networks, double[] outputs, int batchSize)
     {
         Parallel.For(0, batchSize, () =>
         {
-            t_h1 ??= new double[HiddenSize];
-            t_h2 ??= new double[HiddenSize];
-            return (h1: t_h1, h2: t_h2);
-        }, (b, _, buffers) =>
+            if (t_h1 == null || t_h1.Length < MaxHiddenSize)
+                t_h1 = new double[MaxHiddenSize];
+            return t_h1;
+        }, (b, _, h1) =>
         {
             var nn = networks[b];
+            if (nn == null) return h1;
             var input = inputs.AsSpan(b * InputSize, InputSize);
-            var h1 = buffers.h1;
+            var hs = nn.HiddenSize;
 
-            // Layer 1: input -> hidden1
-            for (int h = 0; h < HiddenSize; h++)
+            for (int h = 0; h < hs; h++)
                 h1[h] = nn._bH1[h] + TensorPrimitives.Dot<double>(input, nn._wIH.AsSpan(h * InputSize, InputSize));
-            TensorPrimitives.Tanh<double>(h1, h1);
+            TensorPrimitives.Tanh<double>(h1.AsSpan(0, hs), h1.AsSpan(0, hs));
 
-            Span<double> lastHidden;
-            if (nn.HiddenLayers == 2)
-            {
-                var h2 = buffers.h2;
-                for (int h2i = 0; h2i < HiddenSize; h2i++)
-                    h2[h2i] = nn._bH2[h2i] + TensorPrimitives.Dot<double>(h1, nn._wHH.AsSpan(h2i * HiddenSize, HiddenSize));
-                TensorPrimitives.Tanh<double>(h2, h2);
-                lastHidden = h2;
-            }
-            else
-            {
-                lastHidden = h1;
-            }
-
-            // Output layer
             var outSpan = outputs.AsSpan(b * OutputSize, OutputSize);
             for (int o = 0; o < OutputSize; o++)
-                outSpan[o] = nn._bO[o] + TensorPrimitives.Dot<double>(lastHidden, nn._wHO.AsSpan(o * HiddenSize, HiddenSize));
+                outSpan[o] = nn._bO[o] + TensorPrimitives.Dot<double>(h1.AsSpan(0, hs), nn._wHO.AsSpan(o * hs, hs));
 
-            return buffers;
+            return h1;
         }, _ => { });
     }
 
@@ -123,24 +81,12 @@ public class NeuralNetwork
         _originalGenome = genome;
         int idx = 0;
 
-        // Original genome layout: weightsIH[i,h] stored as i-major
-        // Transposed: _wIH[h * InputSize + i]
         for (int i = 0; i < InputSize; i++)
             for (int h = 0; h < HiddenSize; h++)
                 _wIH[h * InputSize + i] = genome[idx++];
 
         for (int h = 0; h < HiddenSize; h++)
             _bH1[h] = genome[idx++];
-
-        if (HiddenLayers == 2)
-        {
-            for (int h1 = 0; h1 < HiddenSize; h1++)
-                for (int h2 = 0; h2 < HiddenSize; h2++)
-                    _wHH[h2 * HiddenSize + h1] = genome[idx++];
-
-            for (int h = 0; h < HiddenSize; h++)
-                _bH2[h] = genome[idx++];
-        }
 
         for (int h = 0; h < HiddenSize; h++)
             for (int o = 0; o < OutputSize; o++)
