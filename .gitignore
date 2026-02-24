@@ -1,7 +1,7 @@
 .idea/
 bin/
 obj/
-ai_genomes.json
+ai_genomes*.json
 appsettings.Development.json
 node_modules/
 AgarIA.Web/wwwroot/dist/

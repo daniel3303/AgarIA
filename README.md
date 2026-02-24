@@ -58,7 +58,7 @@ Enter a username and click **PLAY** to join, or **SPECTATE** to watch the AI bot
 - **Shooting** fires a projectile that costs 1 mass. Hitting a smaller player rewards mass proportional to the size difference (up to 20)
 - **Mass decays** over time (0.02% per tick) — you must keep eating to maintain size
 - Eating food or players grants a brief **speed boost**
-- Base speed is 4.0, with heavier cells moving slower: `speed = baseSpeed / sqrt(mass / 10)`
+- Base speed is 4.0 for all cells regardless of mass
 
 ## Spectate Mode
 
