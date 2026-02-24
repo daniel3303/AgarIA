@@ -4,7 +4,7 @@ public class GameSettings
 {
     public int MinAIPlayers { get; set; } = 5;
 
-    public int MaxAIPlayers { get; set; } = 20;
+    public int MaxAIPlayers { get; set; } = 50;
 
     public double ResetAtScore { get; set; } = 5000;
 

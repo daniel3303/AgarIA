@@ -78,21 +78,14 @@ public class DashboardController : AdminBaseController
         var winCounts = new Dictionary<string, int> {
             ["easy"] = 0, ["medium"] = 0, ["hard"] = 0, ["human"] = 0
         };
-        var totalCounts = new Dictionary<string, int> {
-            ["easy"] = 0, ["medium"] = 0, ["hard"] = 0, ["human"] = 0
-        };
+        var totalRounds = 0;
 
         foreach (var round in recentRounds) {
             if (round.PlayerStats == null || round.PlayerStats.Count == 0) continue;
+            totalRounds++;
 
             var winner = round.PlayerStats.OrderByDescending(p => p.FinalScore).First();
             var category = ClassifyPlayer(winner);
-
-            foreach (var stat in round.PlayerStats) {
-                var cat = ClassifyPlayer(stat);
-                if (totalCounts.ContainsKey(cat))
-                    totalCounts[cat]++;
-            }
 
             if (winCounts.ContainsKey(category))
                 winCounts[category]++;
@@ -111,10 +104,10 @@ public class DashboardController : AdminBaseController
             maxSpeed = _gameSettings.MaxSpeed,
             fitnessStats = _aiController.GetFitnessStats(),
             winRates = new {
-                easy = new { wins = winCounts["easy"], total = totalCounts["easy"], pct = totalCounts["easy"] > 0 ? Math.Round(100.0 * winCounts["easy"] / totalCounts["easy"], 1) : 0 },
-                medium = new { wins = winCounts["medium"], total = totalCounts["medium"], pct = totalCounts["medium"] > 0 ? Math.Round(100.0 * winCounts["medium"] / totalCounts["medium"], 1) : 0 },
-                hard = new { wins = winCounts["hard"], total = totalCounts["hard"], pct = totalCounts["hard"] > 0 ? Math.Round(100.0 * winCounts["hard"] / totalCounts["hard"], 1) : 0 },
-                human = new { wins = winCounts["human"], total = totalCounts["human"], pct = totalCounts["human"] > 0 ? Math.Round(100.0 * winCounts["human"] / totalCounts["human"], 1) : 0 }
+                easy = new { wins = winCounts["easy"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["easy"] / totalRounds, 1) : 0 },
+                medium = new { wins = winCounts["medium"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["medium"] / totalRounds, 1) : 0 },
+                hard = new { wins = winCounts["hard"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["hard"] / totalRounds, 1) : 0 },
+                human = new { wins = winCounts["human"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["human"] / totalRounds, 1) : 0 }
             }
         });
     }
