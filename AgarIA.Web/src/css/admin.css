@@ -32,7 +32,7 @@
 
 .mvc-grid th.asc .mvc-grid-sort,
 .mvc-grid th.desc .mvc-grid-sort {
-  @apply text-base-content;
+  @apply text-primary;
 }
 
 .mvc-grid .mvc-grid-sort .sort-asc,
@@ -50,11 +50,11 @@
 }
 
 .mvc-grid .asc .mvc-grid-sort .sort-asc {
-  @apply inline-flex text-base-content;
+  @apply inline-flex;
 }
 
 .mvc-grid .desc .mvc-grid-sort .sort-desc {
-  @apply inline-flex text-base-content;
+  @apply inline-flex;
 }
 
 .mvc-grid tr.totals td {
@@ -140,11 +140,11 @@
 }
 
 .mvc-grid-popup .mvc-grid-apply {
-  @apply btn btn-neutral btn-sm mr-1;
+  @apply btn btn-success btn-sm mr-1;
 }
 
 .mvc-grid-popup .mvc-grid-cancel {
-  @apply btn btn-ghost btn-sm ml-1;
+  @apply btn btn-error btn-sm ml-1;
 }
 
 .mvc-grid-pager,
@@ -157,7 +157,7 @@
 }
 
 .mvc-grid-pager .active {
-  @apply btn-neutral border-neutral;
+  @apply btn-primary border-primary;
 }
 
 .mvc-grid-pager [disabled] {
@@ -182,7 +182,7 @@
 }
 
 .grid-action-btn {
-  @apply p-1.5 rounded-lg text-base-content/40 hover:text-base-content hover:bg-base-content/10 transition-colors cursor-pointer inline-flex items-center relative;
+  @apply p-1.5 rounded-lg text-base-content/40 hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer inline-flex items-center relative;
   @apply bg-transparent border border-base-300;
 }
 
@@ -206,7 +206,7 @@
 }
 
 .mvc-grid tbody tr:hover {
-  @apply bg-base-content/5;
+  @apply bg-primary/5;
 }
 
 .form-confirm.inline {

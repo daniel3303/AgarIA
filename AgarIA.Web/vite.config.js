@@ -10,6 +10,7 @@ export default defineConfig({
             input: {
                 admin: "src/css/admin.css",
                 signalr: "src/js/signalr.js",
+                "mvc-grid": "src/js/mvc-grid.js",
             },
             output: {
                 entryFileNames: "[name].js",
