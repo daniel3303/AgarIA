@@ -122,21 +122,26 @@ public class GameEngine : IHostedService, IDisposable
             _collisionManager.RebuildGrids();
             _phaseTimesMs[2] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
+            // Detect collisions in parallel (read-only grid queries)
             ts = Stopwatch.GetTimestamp();
-            HandleProjectileCollisions();
-            _phaseTimesMs[3] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            List<(Player eater, FoodItem food)> foodHits = null;
+            List<(Projectile proj, Player target, float sizeRatio)> projHits = null;
+            List<(Player eater, Player prey)> playerKills = null;
+            List<(Player keeper, Player merged)> merges = null;
+            var projList = _projectileRepository.GetAlive().ToList();
 
-            ts = Stopwatch.GetTimestamp();
-            HandleFoodCollisions();
-            _phaseTimesMs[4] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            Parallel.Invoke(
+                () => { var t = Stopwatch.GetTimestamp(); foodHits = _collisionManager.CheckFoodCollisions(); _phaseTimesMs[4] += Stopwatch.GetElapsedTime(t).TotalMilliseconds; },
+                () => { var t = Stopwatch.GetTimestamp(); projHits = _collisionManager.CheckProjectileCollisions(projList); _phaseTimesMs[3] += Stopwatch.GetElapsedTime(t).TotalMilliseconds; },
+                () => { var t = Stopwatch.GetTimestamp(); playerKills = _collisionManager.CheckPlayerCollisions(); _phaseTimesMs[5] += Stopwatch.GetElapsedTime(t).TotalMilliseconds; },
+                () => { var t = Stopwatch.GetTimestamp(); merges = _collisionManager.CheckMerges(); _phaseTimesMs[6] += Stopwatch.GetElapsedTime(t).TotalMilliseconds; }
+            );
 
-            ts = Stopwatch.GetTimestamp();
-            HandlePlayerCollisions();
-            _phaseTimesMs[5] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
-
-            ts = Stopwatch.GetTimestamp();
-            HandleMerges();
-            _phaseTimesMs[6] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            // Apply results sequentially (mutations)
+            ApplyProjectileCollisions(projHits);
+            ApplyFoodCollisions(foodHits);
+            ApplyPlayerCollisions(playerKills);
+            ApplyMerges(merges);
 
             ts = Stopwatch.GetTimestamp();
             DecayMass();
@@ -208,9 +213,8 @@ public class GameEngine : IHostedService, IDisposable
         });
     }
 
-    private void HandleFoodCollisions()
+    private void ApplyFoodCollisions(List<(Player eater, FoodItem food)> eaten)
     {
-        var eaten = _collisionManager.CheckFoodCollisions();
         foreach (var (eater, food) in eaten)
         {
             _foodRepository.Remove(food.Id);
@@ -222,9 +226,8 @@ public class GameEngine : IHostedService, IDisposable
         }
     }
 
-    private void HandlePlayerCollisions()
+    private void ApplyPlayerCollisions(List<(Player eater, Player prey)> kills)
     {
-        var kills = _collisionManager.CheckPlayerCollisions();
         if (kills.Count == 0) return;
 
         // Compute total mass once before the loop
@@ -263,6 +266,7 @@ public class GameEngine : IHostedService, IDisposable
                 foreach (var cell in splitCells)
                 {
                     cell.IsAlive = false;
+                    _playerRepository.Remove(cell.Id);
                 }
 
                 _hubContext.Clients.Client(prey.Id).Died(new
@@ -270,13 +274,16 @@ public class GameEngine : IHostedService, IDisposable
                     killedBy = eater.Username,
                     finalScore = prey.Score
                 });
+
+                // Clean up dead human players from dictionary
+                if (!prey.IsAI)
+                    _playerRepository.Remove(prey.Id);
             }
         }
     }
 
-    private void HandleMerges()
+    private void ApplyMerges(List<(Player keeper, Player merged)> merges)
     {
-        var merges = _collisionManager.CheckMerges();
         foreach (var (k, m) in merges)
         {
             if (!m.IsAlive) continue;
@@ -319,10 +326,8 @@ public class GameEngine : IHostedService, IDisposable
         }
     }
 
-    private void HandleProjectileCollisions()
+    private void ApplyProjectileCollisions(List<(Projectile proj, Player target, float sizeRatio)> hits)
     {
-        var hits = _collisionManager.CheckProjectileCollisions(_projectileRepository.GetAlive().ToList());
-
         foreach (var (proj, target, sizeRatio) in hits)
         {
             proj.IsAlive = false;
@@ -335,7 +340,7 @@ public class GameEngine : IHostedService, IDisposable
             }
 
             // Reward shooter: refund based on size ratio, must be at least 2x to gain extra
-            var reward = Math.Min((int)Math.Floor(sizeRatio), 20);
+            var reward = Math.Min((int)MathF.Floor(sizeRatio), 20);
             reward = Math.Max(reward, 1);
             var shooter = _playerRepository.Get(proj.OwnerId);
             if (shooter != null && shooter.IsAlive)
@@ -401,32 +406,62 @@ public class GameEngine : IHostedService, IDisposable
     private void BroadcastGameState()
     {
         var alivePlayers = _playerRepository.GetAlive().ToList();
-        var players = alivePlayers.Select(p => new
-        {
-            id = p.Id,
-            x = p.X,
-            y = p.Y,
-            radius = p.Radius,
-            username = p.Username,
-            colorIndex = p.ColorIndex,
-            score = p.Score,
-            boosting = _gameState.CurrentTick < p.SpeedBoostUntil,
-            ownerId = p.OwnerId,
-            isAI = p.IsAI
-        }).ToList();
 
-        var foodList = new List<FoodDto>(_foodRepository.GetCount());
-        foreach (var f in _foodRepository.GetAll())
-            foodList.Add(new FoodDto(f.Id, f.X, f.Y, f.ColorIndex));
-        var food = foodList;
+        // Build DTOs in parallel
+        object[] players = null;
+        List<FoodDto> food = null;
+        object[] projectilesDtos = null;
 
-        var projectiles = _projectileRepository.GetAlive().Select(p => new
-        {
-            id = p.Id,
-            x = p.X,
-            y = p.Y,
-            ownerId = p.OwnerId
-        }).ToList();
+        var currentTick = _gameState.CurrentTick;
+        var aliveProjectiles = _projectileRepository.GetAlive().ToList();
+
+        Parallel.Invoke(
+            () =>
+            {
+                players = new object[alivePlayers.Count];
+                for (int i = 0; i < alivePlayers.Count; i++)
+                {
+                    var p = alivePlayers[i];
+                    players[i] = new
+                    {
+                        id = p.Id,
+                        x = p.X,
+                        y = p.Y,
+                        radius = p.Radius,
+                        username = p.Username,
+                        colorIndex = p.ColorIndex,
+                        score = p.Score,
+                        boosting = currentTick < p.SpeedBoostUntil,
+                        ownerId = p.OwnerId,
+                        isAI = p.IsAI
+                    };
+                }
+            },
+            () =>
+            {
+                var allFood = _foodRepository.GetAll().ToList();
+                food = new List<FoodDto>(allFood.Count);
+                foreach (var f in allFood)
+                    food.Add(new FoodDto(f.Id, f.X, f.Y, f.ColorIndex));
+            },
+            () =>
+            {
+                projectilesDtos = new object[aliveProjectiles.Count];
+                for (int i = 0; i < aliveProjectiles.Count; i++)
+                {
+                    var p = aliveProjectiles[i];
+                    projectilesDtos[i] = new
+                    {
+                        id = p.Id,
+                        x = p.X,
+                        y = p.Y,
+                        ownerId = p.OwnerId
+                    };
+                }
+            }
+        );
+
+        var projectiles = projectilesDtos;
 
         var humanPlayers = alivePlayers.Where(p => !p.IsAI && p.OwnerId == null).ToList();
         if (humanPlayers.Any() && !_loggedFirstBroadcast)

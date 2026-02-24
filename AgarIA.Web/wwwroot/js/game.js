@@ -8,6 +8,7 @@
     let botViewEnabled = false;
     let followedBotId = null;
     let botViewData = null;
+    let firstUpdateReceived = false;
     const camera = { x: 2000, y: 2000, zoom: 1 };
     const spectatorKeys = {};
 
@@ -103,18 +104,21 @@
             Network.spectate().then(() => {
                 console.log("Re-registered as spectator");
                 prevState = null;
+                firstUpdateReceived = false;
             });
         } else if (currentUsername) {
             Network.join(currentUsername).then(() => {
                 console.log("Rejoined as", currentUsername);
                 prevState = null;
+                firstUpdateReceived = false;
             });
         }
     }
 
     // Receive game state from server, store for interpolation
     function handleGameUpdate(data) {
-        if (!prevState || !prevState.you) {
+        if (!firstUpdateReceived) {
+            firstUpdateReceived = true;
             console.log("First game update received:", data.players?.length, "players,", data.food?.length, "food");
         }
         prevState = gameState;

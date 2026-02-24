@@ -271,12 +271,9 @@ public class AIPlayerController : IAIController
 
         ts = Stopwatch.GetTimestamp();
 
-        // Parallel phase: exploration tracking, target assignment, split-cell propagation
-        // Collect split/shoot commands for serial application
-        var splitCommands = new List<Player>();
-        var shootCommands = new List<(Player bot, float nx, float ny)>();
-        var splitLock = new object();
-        var shootLock = new object();
+        // Per-bot command slots (lock-free)
+        var wantsSplit = new bool[bots.Count];
+        var shootDir = new (float nx, float ny)?[bots.Count];
 
         Parallel.For(0, decisions.Length, i =>
         {
@@ -296,13 +293,11 @@ public class AIPlayerController : IAIController
                 }
             }
 
-            // Collect split commands
+            // Flag split
             if (output[2] > 0.5f && bot.Mass >= GameConfig.MinSplitMass)
-            {
-                lock (splitLock) splitCommands.Add(bot);
-            }
+                wantsSplit[i] = true;
 
-            // Collect shoot commands
+            // Compute shoot direction
             var lastShot = _lastShotTick.GetValueOrDefault(bot.Id, 0);
             if (output[3] > 0.5f && bot.Mass > GameConfig.MinMass && currentTick - lastShot >= ShootCooldownTicks)
             {
@@ -310,35 +305,35 @@ public class AIPlayerController : IAIController
                 var shootDy = output[5];
                 var shootDist = MathF.Sqrt(shootDx * shootDx + shootDy * shootDy);
                 if (shootDist > 0.01f)
-                {
-                    lock (shootLock) shootCommands.Add((bot, shootDx / shootDist, shootDy / shootDist));
-                }
+                    shootDir[i] = (shootDx / shootDist, shootDy / shootDist);
             }
         });
 
         // Serial phase: apply split and shoot commands (shared state mutations)
-        foreach (var bot in splitCommands)
+        for (int i = 0; i < bots.Count; i++)
         {
-            SplitBot(bot, currentTick, splitCellsByOwner);
-        }
+            if (wantsSplit[i])
+                SplitBot(bots[i], currentTick, splitCellsByOwner);
 
-        foreach (var (bot, nx, ny) in shootCommands)
-        {
-            _lastShotTick[bot.Id] = currentTick;
-            bot.Mass -= 1;
-
-            var projectile = new Projectile
+            if (shootDir[i] is var (nx, ny))
             {
-                Id = _projectileRepository.NextId(),
-                X = bot.X + nx * bot.Radius,
-                Y = bot.Y + ny * bot.Radius,
-                VX = nx * GameConfig.ProjectileSpeed,
-                VY = ny * GameConfig.ProjectileSpeed,
-                OwnerId = bot.Id,
-                OwnerMassAtFire = bot.Mass,
-                IsAlive = true
-            };
-            _projectileRepository.Add(projectile);
+                var bot = bots[i];
+                _lastShotTick[bot.Id] = currentTick;
+                bot.Mass -= 1;
+
+                var projectile = new Projectile
+                {
+                    Id = _projectileRepository.NextId(),
+                    X = bot.X + nx * bot.Radius,
+                    Y = bot.Y + ny * bot.Radius,
+                    VX = nx * GameConfig.ProjectileSpeed,
+                    VY = ny * GameConfig.ProjectileSpeed,
+                    OwnerId = bot.Id,
+                    OwnerMassAtFire = bot.Mass,
+                    IsAlive = true
+                };
+                _projectileRepository.Add(projectile);
+            }
         }
 
         _aiSeqMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
@@ -346,10 +341,14 @@ public class AIPlayerController : IAIController
 
     private void SplitBot(Player bot, long currentTick, Dictionary<string, List<Player>> splitCellsByOwner)
     {
+        var existingCount = splitCellsByOwner.TryGetValue(bot.Id, out var owned) ? owned.Count : 0;
+        var maxNewSplits = GameConfig.MaxSplitCells - existingCount;
+        if (maxNewSplits <= 0) return;
+
         var cellsToSplit = new List<Player> { bot };
-        if (splitCellsByOwner.TryGetValue(bot.Id, out var owned))
+        if (owned != null)
             cellsToSplit.AddRange(owned);
-        cellsToSplit = cellsToSplit.Where(c => c.Mass >= GameConfig.MinSplitMass).ToList();
+        cellsToSplit = cellsToSplit.Where(c => c.Mass >= GameConfig.MinSplitMass).Take(maxNewSplits).ToList();
 
         foreach (var cell in cellsToSplit)
         {

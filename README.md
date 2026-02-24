@@ -45,7 +45,7 @@ Enter a username and click **PLAY** to join, or **SPECTATE** to watch the AI bot
 - Every player starts with **10 mass**
 - Eat **food pellets** (+1 mass each) scattered across the 4000x4000 map
 - Eat **other players** by being at least **15% larger** (1.15x mass ratio) and overlapping them
-- **Splitting** divides your cell in two (minimum 24 mass required). Split cells merge back after a cooldown (200 ticks / 10 seconds)
+- **Splitting** divides your cell in two (minimum 24 mass required, max 4 split cells per player). Split cells merge back after a cooldown (200 ticks / 10 seconds)
 - **Shooting** fires a projectile that costs 1 mass. Hitting a smaller player rewards mass proportional to the size difference (up to 20)
 - **Mass decays** over time (0.02% per tick) — you must keep eating to maintain size
 - Eating food or players grants a brief **speed boost**
@@ -71,23 +71,23 @@ The project includes a password-protected admin panel at `/admin/` for monitorin
 
 ### Neural Network
 
-Each AI bot is controlled by a feedforward neural network. Bots are split 50/50 into two tiers:
+Each AI bot is controlled by a feedforward neural network with 1 hidden layer. Bots are split 50/50 into two tiers:
 
-- **Easy** `(E)` — 1 hidden layer, genome size: **4,742 weights**
-- **Medium** `(M)` — 2 hidden layers, genome size: **8,902 weights**
+- **Easy** `(E)` — 64 hidden neurons, genome size: **10,694 weights**
+- **Medium** `(M)` — 128 hidden neurons, genome size: **21,390 weights**
 
 ```
-Easy:   67 inputs → 64 hidden (tanh) → 6 outputs
-Medium: 67 inputs → 64 hidden (tanh) → 64 hidden (tanh) → 6 outputs
+Easy:   161 inputs → 64 hidden (tanh) → 6 outputs
+Medium: 161 inputs → 128 hidden (tanh) → 6 outputs
 ```
 
-#### Input Features (67)
+#### Input Features (161)
 
 | Feature Group | Count | Description |
 |---------------|-------|-------------|
 | Self info | 7 | Mass relative to largest, absolute mass (1/mass), can-split flag, two largest cells' positions |
-| Nearest food | 20 | 10 closest food items (dx, dy each) |
-| Nearest players | 30 | 10 closest players (dx, dy, relative mass each) |
+| Nearest food | 64 | 32 closest food items (dx, dy each) |
+| Nearest players | 80 | 16 closest players (dx, dy, relative mass, vx, vy each) |
 | Nearest projectiles | 10 | 5 closest projectiles (dx, dy each) |
 
 #### Output Decisions (6)

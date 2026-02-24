@@ -32,37 +32,46 @@ public class CollisionManager
 
     public List<(Player eater, FoodItem food)> CheckFoodCollisions()
     {
-        var eaten = new List<(Player, FoodItem)>();
         var players = _grids.PlayerGrid.AllItems;
-        var buffer = new List<FoodItem>();
 
-        foreach (var player in players)
+        var results = new List<(Player, FoodItem)>[players.Count];
+        Parallel.For(0, players.Count, () => new List<FoodItem>(), (i, _, buffer) =>
         {
+            var player = players[i];
+            var rSq = player.Radius * player.Radius;
             var nearby = _grids.FoodGrid.Query(player.X, player.Y, player.Radius, buffer);
+            List<(Player, FoodItem)> local = null;
+
             foreach (var item in nearby)
             {
                 var dx = player.X - item.X;
                 var dy = player.Y - item.Y;
 
-                if (dx * dx + dy * dy < player.Radius * player.Radius)
+                if (dx * dx + dy * dy < rSq)
                 {
-                    eaten.Add((player, item));
+                    local ??= new List<(Player, FoodItem)>();
+                    local.Add((player, item));
                 }
             }
-        }
 
-        return eaten;
+            results[i] = local;
+            return buffer;
+        }, _ => { });
+
+        return MergeResults(results);
     }
 
     public List<(Player eater, Player prey)> CheckPlayerCollisions()
     {
-        var kills = new List<(Player, Player)>();
         var players = _grids.PlayerGrid.AllItems;
-        var buffer = new List<Player>();
 
-        foreach (var player in players)
+        var results = new List<(Player, Player)>[players.Count];
+        Parallel.For(0, players.Count, () => new List<Player>(), (i, _, buffer) =>
         {
+            var player = players[i];
             var nearby = _grids.PlayerGrid.Query(player.X, player.Y, player.Radius, buffer);
+            List<(Player, Player)> local = null;
+
             foreach (var other in nearby)
             {
                 if (other == player) continue;
@@ -77,29 +86,36 @@ public class CollisionManager
                 {
                     if (player.Mass > other.Mass * GameConfig.EatSizeRatio)
                     {
-                        kills.Add((player, other));
+                        local ??= new List<(Player, Player)>();
+                        local.Add((player, other));
                     }
                     else if (other.Mass > player.Mass * GameConfig.EatSizeRatio)
                     {
-                        kills.Add((other, player));
+                        local ??= new List<(Player, Player)>();
+                        local.Add((other, player));
                     }
                 }
             }
-        }
 
-        return kills;
+            results[i] = local;
+            return buffer;
+        }, _ => { });
+
+        return MergeResults(results);
     }
 
     public List<(Player keeper, Player merged)> CheckMerges()
     {
-        var merges = new List<(Player, Player)>();
         var players = _grids.PlayerGrid.AllItems;
         var currentTick = _gameState.CurrentTick;
-        var buffer = new List<Player>();
 
-        foreach (var player in players)
+        var results = new List<(Player, Player)>[players.Count];
+        Parallel.For(0, players.Count, () => new List<Player>(), (i, _, buffer) =>
         {
+            var player = players[i];
             var nearby = _grids.PlayerGrid.Query(player.X, player.Y, player.Radius, buffer);
+            List<(Player, Player)> local = null;
+
             foreach (var other in nearby)
             {
                 if (other == player) continue;
@@ -113,25 +129,28 @@ public class CollisionManager
 
                 if (dx * dx + dy * dy < maxR * maxR)
                 {
+                    local ??= new List<(Player, Player)>();
                     if (player.Mass >= other.Mass)
-                        merges.Add((player, other));
+                        local.Add((player, other));
                     else
-                        merges.Add((other, player));
+                        local.Add((other, player));
                 }
             }
-        }
 
-        return merges;
+            results[i] = local;
+            return buffer;
+        }, _ => { });
+
+        return MergeResults(results);
     }
 
-    public List<(Projectile proj, Player target, double sizeRatio)> CheckProjectileCollisions(IEnumerable<Projectile> projectiles)
+    public List<(Projectile proj, Player target, float sizeRatio)> CheckProjectileCollisions(List<Projectile> projectiles)
     {
-        var hits = new List<(Projectile, Player, double)>();
-        var buffer = new List<Player>();
-
-        foreach (var proj in projectiles)
+        var results = new (Projectile proj, Player target, float sizeRatio)?[projectiles.Count];
+        Parallel.For(0, projectiles.Count, () => new List<Player>(), (i, _, buffer) =>
         {
-            if (!proj.IsAlive) continue;
+            var proj = projectiles[i];
+            if (!proj.IsAlive) return buffer;
 
             var nearby = _grids.PlayerGrid.Query(proj.X, proj.Y, 200, buffer);
             foreach (var player in nearby)
@@ -144,13 +163,21 @@ public class CollisionManager
 
                 if (dx * dx + dy * dy < player.Radius * player.Radius)
                 {
-                    var sizeRatio = player.Mass / Math.Max(1, proj.OwnerMassAtFire);
-                    hits.Add((proj, player, sizeRatio));
+                    var sizeRatio = (float)(player.Mass / Math.Max(1, proj.OwnerMassAtFire));
+                    results[i] = (proj, player, sizeRatio);
                     break;
                 }
             }
-        }
 
+            return buffer;
+        }, _ => { });
+
+        var hits = new List<(Projectile, Player, float)>();
+        foreach (var r in results)
+        {
+            if (r.HasValue)
+                hits.Add(r.Value);
+        }
         return hits;
     }
 
@@ -159,5 +186,21 @@ public class CollisionManager
         var ownerA = a.OwnerId ?? a.Id;
         var ownerB = b.OwnerId ?? b.Id;
         return ownerA == ownerB;
+    }
+
+    private static List<T> MergeResults<T>(List<T>[] results)
+    {
+        int total = 0;
+        foreach (var r in results)
+        {
+            if (r != null) total += r.Count;
+        }
+
+        var merged = new List<T>(total);
+        foreach (var r in results)
+        {
+            if (r != null) merged.AddRange(r);
+        }
+        return merged;
     }
 }

@@ -19,4 +19,5 @@ public static class GameConfig
     public const double SplitDistance = 160;
     public const double SplitSpeed = 12.0;
     public const int MergeCooldownTicks = 200;
+    public const int MaxSplitCells = 4;
 }
