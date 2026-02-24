@@ -26,6 +26,15 @@ dotnet run --project AgarIA.Web
 
 The server starts on a local port (shown in the terminal). Open the URL in your browser to play.
 
+### Docker
+
+```bash
+docker build -t agaria .
+docker run -p 5274:5274 agaria
+```
+
+Open `http://localhost:5274` in your browser.
+
 ## How to Play
 
 ![Join Screen](docs/screenshots/join-screen.png)
@@ -108,8 +117,10 @@ The hidden layer architecture for each tier is configurable from the admin Setti
 Each tier has its own independent genetic algorithm with a pool of **200 genomes**:
 
 - **Selection**: Tournament selection (pick 12 random, keep the fittest)
-- **Crossover**: 70% chance — each weight randomly inherited from either parent
-- **Mutation**: 10% chance per weight — Gaussian noise (sigma = 0.3)
+- **Elitism**: Top 2 genomes are carried forward unmutated each generation, preserving the best solutions
+- **Block crossover**: 70% chance — picks 1–3 random crossover points and alternates contiguous segments from each parent, preserving neuron-level weight correlations (unlike uniform per-weight crossover which scrambles co-adapted weights)
+- **Adaptive mutation rate**: Scales inversely with genome size using Easy tier (10,374 weights) as reference — Easy ~10%, Medium ~5%, Hard ~2.5%, clamped to [1%, 15%]. Larger networks get gentler mutations to avoid destroying learned structure
+- **Self-adaptive sigma**: Each genome carries its own mutation strength (sigma). Children inherit the average of their parents' sigmas, then sigma itself mutates: `sigma *= exp(τ × gaussian())` where `τ = 1/√genomeSize`. Clamped to [0.005, 1.0]. This lets the population self-tune mutation intensity over generations
 - **Pool management**: When pool exceeds 200, the lowest-fitness genome is removed. Duplicate genomes are prevented — if a genome already exists in the pool, only the higher fitness is kept
 - **Live checkpoints**: Every 30 seconds, all live bots report their current fitness to the pool. This ensures long-surviving dominant bots keep their genomes competitive without waiting until death
 
