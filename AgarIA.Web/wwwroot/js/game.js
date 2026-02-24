@@ -36,6 +36,7 @@
         onFitnessStats: handleFitnessStats,
         onResetScores: handleResetScores,
         onBotViewUpdate: handleBotViewUpdate,
+        onGameReset: handleGameReset,
         onYouAre: handleYouAre
     }).then(() => {
         console.log("Connected to game server");
@@ -166,6 +167,15 @@
         document.getElementById("finalScoreText").textContent = `Score: ${data.finalScore}`;
         deathOverlay.style.display = "flex";
         hud.style.display = "none";
+    }
+
+    // Handle game reset — show death overlay so player can rejoin
+    function handleGameReset() {
+        document.getElementById("killedByText").textContent = "Game Reset";
+        document.getElementById("finalScoreText").textContent = "";
+        deathOverlay.style.display = "flex";
+        hud.style.display = "none";
+        gameState = null;
     }
 
     // Update leaderboard list in HUD

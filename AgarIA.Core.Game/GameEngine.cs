@@ -688,15 +688,8 @@ public class GameEngine : IHostedService, IDisposable
             _logger.LogError(ex, "Error saving game history on reset");
         }
 
-        // Notify connected human players that the game reset (shows death/rejoin overlay)
-        foreach (var player in _playerRepository.GetAlive().Where(p => !p.IsAI && p.OwnerId == null).ToList())
-        {
-            _hubContext.Clients.Client(player.Id).Died(new
-            {
-                killedBy = "Game Reset",
-                finalScore = player.Score
-            });
-        }
+        // Notify all connected human players (alive or on death screen) that the game reset
+        _hubContext.Clients.Group("humans").GameReset(new { message = "Game Reset" });
 
         foreach (var player in _playerRepository.GetAlive().ToList())
         {

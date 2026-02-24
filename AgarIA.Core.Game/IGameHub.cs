@@ -12,6 +12,7 @@ public interface IGameHub
     Task FitnessStats(object data);
     Task ResetScores(object data);
     Task BotViewUpdate(object data);
+    Task GameReset(object data);
     Task YouAre(string connectionId);
 }
 
