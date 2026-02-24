@@ -159,7 +159,7 @@ public class GameEngine : IHostedService, IDisposable
                     parts[pi] = $"{_phaseNames[pi]}={_phaseTimesMs[pi]:F1}ms";
                     _phaseTimesMs[pi] = 0;
                 }
-                _logger.LogInformation("Tick breakdown (last 1s): {Breakdown}", string.Join(" | ", parts));
+                _logger.LogInformation("Tick breakdown (last 1s): {Breakdown} | Players={PlayerCount}", string.Join(" | ", parts), _playerRepository.GetAlive().Count());
                 _logger.LogInformation("  AI detail: {AIBreakdown}", _aiController.GetTickBreakdown());
             }
 
@@ -460,6 +460,24 @@ public class GameEngine : IHostedService, IDisposable
         foreach (var spectatorId in _gameState.Spectators.Keys)
         {
             _hubContext.Clients.Client(spectatorId).GameUpdate(spectatorUpdate);
+        }
+
+        // Send bot view perception data to subscribed spectators
+        foreach (var (spectatorId, botId) in _gameState.BotViewSpectators)
+        {
+            if (_aiController.BotPerceptions.TryGetValue(botId, out var perception))
+            {
+                _hubContext.Clients.Client(spectatorId).BotViewUpdate(new
+                {
+                    botId,
+                    foodIds = perception.FoodIds,
+                    playerIds = perception.PlayerIds,
+                    projectileIds = perception.ProjectileIds,
+                    largestPlayerId = perception.LargestPlayerId,
+                    foodRadius = perception.FoodRadius,
+                    playerRadius = perception.PlayerRadius
+                });
+            }
         }
     }
 

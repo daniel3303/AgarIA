@@ -11,4 +11,6 @@ public class GameState
     public int NextProjectileId;
     public long CurrentTick;
     public ConcurrentDictionary<string, bool> Spectators { get; set; } = new();
+    public ConcurrentDictionary<string, string> BotViewSpectators { get; set; } = new();
+
 }

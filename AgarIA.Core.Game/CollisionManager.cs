@@ -22,18 +22,23 @@ public class CollisionManager
 
     public void RebuildGrids()
     {
-        _grids.FoodGrid.Rebuild(_foodRepository.GetAll().ToList());
-        _grids.PlayerGrid.Rebuild(_playerRepository.GetAlive().ToList());
+        var foodList = _foodRepository.GetAll().ToList();
+        var playerList = _playerRepository.GetAlive().ToList();
+        Parallel.Invoke(
+            () => _grids.FoodGrid.Rebuild(foodList),
+            () => _grids.PlayerGrid.Rebuild(playerList)
+        );
     }
 
     public List<(Player eater, FoodItem food)> CheckFoodCollisions()
     {
         var eaten = new List<(Player, FoodItem)>();
         var players = _grids.PlayerGrid.AllItems;
+        var buffer = new List<FoodItem>();
 
         foreach (var player in players)
         {
-            var nearby = _grids.FoodGrid.Query(player.X, player.Y, player.Radius);
+            var nearby = _grids.FoodGrid.Query(player.X, player.Y, player.Radius, buffer);
             foreach (var item in nearby)
             {
                 var dx = player.X - item.X;
@@ -53,10 +58,11 @@ public class CollisionManager
     {
         var kills = new List<(Player, Player)>();
         var players = _grids.PlayerGrid.AllItems;
+        var buffer = new List<Player>();
 
         foreach (var player in players)
         {
-            var nearby = _grids.PlayerGrid.Query(player.X, player.Y, player.Radius);
+            var nearby = _grids.PlayerGrid.Query(player.X, player.Y, player.Radius, buffer);
             foreach (var other in nearby)
             {
                 if (other == player) continue;
@@ -89,10 +95,11 @@ public class CollisionManager
         var merges = new List<(Player, Player)>();
         var players = _grids.PlayerGrid.AllItems;
         var currentTick = _gameState.CurrentTick;
+        var buffer = new List<Player>();
 
         foreach (var player in players)
         {
-            var nearby = _grids.PlayerGrid.Query(player.X, player.Y, player.Radius);
+            var nearby = _grids.PlayerGrid.Query(player.X, player.Y, player.Radius, buffer);
             foreach (var other in nearby)
             {
                 if (other == player) continue;
@@ -120,12 +127,13 @@ public class CollisionManager
     public List<(Projectile proj, Player target, double sizeRatio)> CheckProjectileCollisions(IEnumerable<Projectile> projectiles)
     {
         var hits = new List<(Projectile, Player, double)>();
+        var buffer = new List<Player>();
 
         foreach (var proj in projectiles)
         {
             if (!proj.IsAlive) continue;
 
-            var nearby = _grids.PlayerGrid.Query(proj.X, proj.Y, 200);
+            var nearby = _grids.PlayerGrid.Query(proj.X, proj.Y, 200, buffer);
             foreach (var player in nearby)
             {
                 var ownerId = player.OwnerId ?? player.Id;
