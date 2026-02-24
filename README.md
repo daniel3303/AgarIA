@@ -14,7 +14,7 @@ An agar.io-style multiplayer cell arena game where AI players evolve using genet
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/AgarIA.git
+git clone https://github.com/daniel3303/AgarIA.git
 cd AgarIA
 
 # Build
@@ -27,6 +27,14 @@ dotnet run --project AgarIA.Web
 The server starts on a local port (shown in the terminal). Open the URL in your browser to play.
 
 ### Docker
+
+Pull the pre-built image from Docker Hub:
+
+```bash
+docker run -p 5274:5274 daniel3303/agaria:latest
+```
+
+Or build locally:
 
 ```bash
 docker build -t agaria .
