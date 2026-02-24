@@ -1,8 +1,8 @@
 # Stage 1: Build frontend
 FROM node:22-alpine AS frontend
 WORKDIR /src/AgarIA.Web
-COPY AgarIA.Web/package.json AgarIA.Web/package-lock.json* ./
-RUN npm ci
+COPY AgarIA.Web/package.json ./
+RUN npm install
 COPY AgarIA.Web/ ./
 RUN npm run build
 
