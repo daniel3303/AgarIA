@@ -34,13 +34,6 @@ Pull the pre-built image from Docker Hub:
 docker run -p 5274:5274 daniel3303/agaria:latest
 ```
 
-Or build locally:
-
-```bash
-docker build -t agaria .
-docker run -p 5274:5274 agaria
-```
-
 Open `http://localhost:5274` in your browser.
 
 ## How to Play
