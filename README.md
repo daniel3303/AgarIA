@@ -82,7 +82,7 @@ In spectate mode you can observe the AI bots competing and evolving in real time
 
 ![Admin Dashboard](docs/screenshots/admin-dashboard.png)
 
-The project includes a password-protected admin panel at `/admin/` for monitoring the simulation, adjusting game settings, and viewing round history.
+The project includes a password-protected admin panel at `/admin/` for monitoring the simulation, adjusting game settings, and viewing round history. Default credentials: **admin** / **admin**.
 
 ## AI Architecture
 
