@@ -273,7 +273,10 @@
         if (renderState.you) {
             const me = renderState.players.find(p => p.id === renderState.you);
             if (me) {
-                scoreDisplay.textContent = `Score: ${me.score}`;
+                const totalScore = renderState.players
+                    .filter(p => p.id === renderState.you || p.ownerId === renderState.you)
+                    .reduce((sum, p) => sum + p.score, 0);
+                scoreDisplay.textContent = `Score: ${totalScore}`;
             }
         }
     }

@@ -23,14 +23,12 @@ public class AIPlayerController : IAIController
     private readonly Random _random = new();
     private readonly Dictionary<string, NeuralNetwork> _brains = new();
     private readonly Dictionary<string, BotDifficulty> _botDifficulty = new();
-    private readonly Dictionary<string, HashSet<int>> _visitedCells = new();
     private readonly Dictionary<string, long> _lastShotTick = new();
     private readonly Dictionary<string, long> _spawnTick = new();
     private long _currentTick;
     private DateTime _lastCheckpoint = DateTime.UtcNow.AddSeconds(-15); // Offset from decay by 15s to avoid race
     private const int ShootCooldownTicks = 10;
     private const int CheckpointIntervalSeconds = 30;
-    private const int ExplorationGridSize = 40; // 4000/40 = 100 cells per axis, 10000 total
     private int _currentMaxAI = new Random().Next(10, 101);
     private readonly SharedGrids _grids;
     public ConcurrentDictionary<string, BotPerception> BotPerceptions { get; } = new();
@@ -120,10 +118,14 @@ public class AIPlayerController : IAIController
         var aiBots = allBots.Where(p => p.IsAI && p.IsAlive && p.OwnerId == null).ToList();
         var needed = _currentMaxAI - aiBots.Count;
 
+        var easyCount = aiBots.Count(b => _botDifficulty.TryGetValue(b.Id, out var d) && d == BotDifficulty.Easy);
+        var mediumCount = aiBots.Count(b => _botDifficulty.TryGetValue(b.Id, out var d) && d == BotDifficulty.Medium);
+
         for (int i = 0; i < needed; i++)
         {
-            // Alternate 50/50 between Easy and Medium
-            var difficulty = i % 2 == 0 ? BotDifficulty.Easy : BotDifficulty.Medium;
+            // Spawn whichever tier is underrepresented to maintain 50/50 balance
+            var difficulty = easyCount <= mediumCount ? BotDifficulty.Easy : BotDifficulty.Medium;
+            if (difficulty == BotDifficulty.Easy) easyCount++; else mediumCount++;
             var hiddenLayers = difficulty == BotDifficulty.Easy ? 1 : 2;
             var ga = difficulty == BotDifficulty.Easy ? _gaEasy : _gaMedium;
             var prefix = difficulty == BotDifficulty.Easy ? "(E)" : "(M)";
@@ -147,7 +149,6 @@ public class AIPlayerController : IAIController
             _brains[id] = brain;
             _botDifficulty[id] = difficulty;
             _spawnTick[id] = _currentTick;
-            _visitedCells[id] = new HashSet<int>();
         }
     }
 
@@ -235,8 +236,8 @@ public class AIPlayerController : IAIController
 
         // Phase 1: Build feature vectors in parallel
         ts = Stopwatch.GetTimestamp();
-        const int featureSize = 66;
-        const int outputSize = 12;
+        const int featureSize = 67;
+        const int outputSize = 6;
         var batchInputs = new double[bots.Count * featureSize];
         var batchNetworks = new NeuralNetwork[bots.Count];
         var botHasBrain = new bool[bots.Count];
@@ -260,7 +261,7 @@ public class AIPlayerController : IAIController
         NeuralNetwork.BatchForward(batchInputs, batchNetworks, batchOutputs, bots.Count);
         _aiForwardMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
-        // Phase 3: Decode decisions
+        // Phase 3: Decode decisions — continuous movement regression
         var decisions = new (Player bot, double[] output, double targetX, double targetY)[bots.Count];
         for (int i = 0; i < bots.Count; i++)
         {
@@ -269,22 +270,13 @@ public class AIPlayerController : IAIController
             var output = new double[outputSize];
             batchOutputs.AsSpan(i * outputSize, outputSize).CopyTo(output);
 
-            int bestDir = 0;
-            double bestVal = output[0];
-            for (int d = 1; d < 8; d++)
-            {
-                if (output[d] > bestVal)
-                {
-                    bestVal = output[d];
-                    bestDir = d;
-                }
-            }
+            // output[0..1] = moveX, moveY direction (tanh → -1..1, scale to 200px offset)
+            var moveX = Math.Tanh(output[0]) * 200;
+            var moveY = Math.Tanh(output[1]) * 200;
+            var targetX = Math.Clamp(bot.X + moveX, 0, GameConfig.MapSize);
+            var targetY = Math.Clamp(bot.Y + moveY, 0, GameConfig.MapSize);
 
-            var angle = bestDir * (2 * Math.PI / 8);
-            var targetX = bot.X + Math.Cos(angle) * 200;
-            var targetY = bot.Y + Math.Sin(angle) * 200;
-
-            decisions[i] = (bot, output, Math.Clamp(targetX, 0, GameConfig.MapSize), Math.Clamp(targetY, 0, GameConfig.MapSize));
+            decisions[i] = (bot, output, targetX, targetY);
         }
 
         ts = Stopwatch.GetTimestamp();
@@ -301,15 +293,6 @@ public class AIPlayerController : IAIController
             var (bot, output, targetX, targetY) = decisions[i];
             if (output == null) return;
 
-            // Track exploration
-            if (_visitedCells.TryGetValue(bot.Id, out var visited))
-            {
-                var cellsPerRow = (int)(GameConfig.MapSize / ExplorationGridSize);
-                var gridX = Math.Min((int)(bot.X / ExplorationGridSize), cellsPerRow - 1);
-                var gridY = Math.Min((int)(bot.Y / ExplorationGridSize), cellsPerRow - 1);
-                lock (visited) visited.Add(gridY * cellsPerRow + gridX);
-            }
-
             bot.TargetX = targetX;
             bot.TargetY = targetY;
 
@@ -324,17 +307,17 @@ public class AIPlayerController : IAIController
             }
 
             // Collect split commands
-            if (output[8] > 0.5 && bot.Mass >= GameConfig.MinSplitMass)
+            if (output[2] > 0.5 && bot.Mass >= GameConfig.MinSplitMass)
             {
                 lock (splitLock) splitCommands.Add(bot);
             }
 
             // Collect shoot commands
             var lastShot = _lastShotTick.GetValueOrDefault(bot.Id, 0);
-            if (output[9] > 0.5 && bot.Mass > GameConfig.MinMass && currentTick - lastShot >= ShootCooldownTicks)
+            if (output[3] > 0.5 && bot.Mass > GameConfig.MinMass && currentTick - lastShot >= ShootCooldownTicks)
             {
-                var shootDx = output[10];
-                var shootDy = output[11];
+                var shootDx = output[4];
+                var shootDy = output[5];
                 var shootDist = Math.Sqrt(shootDx * shootDx + shootDy * shootDy);
                 if (shootDist > 0.01)
                 {
@@ -410,13 +393,16 @@ public class AIPlayerController : IAIController
                 MergeAfterTick = currentTick + GameConfig.MergeCooldownTicks
             };
 
+            splitCell.SpeedBoostMultiplier = GameConfig.SplitSpeed / GameConfig.BaseSpeed;
+            splitCell.SpeedBoostUntil = currentTick + GameConfig.SpeedBoostDuration;
+
             _playerRepository.Add(splitCell);
         }
     }
 
     private double[] BuildFeatureVector(Player bot, List<FoodItem> allFood, List<Player> nearbyPlayers, List<Projectile> allProjectiles, Player secondCell, Player globalLargest)
     {
-        var features = new double[66];
+        var features = new double[67];
         int idx = 0;
 
         var botX = bot.X;
@@ -425,6 +411,9 @@ public class AIPlayerController : IAIController
 
         // Own mass relative to largest (1)
         features[idx++] = largestMass > 0 ? bot.Mass / largestMass : 1.0;
+
+        // Absolute mass indicator (1) — 1.0 when tiny, ~0 when huge
+        features[idx++] = 1.0 / bot.Mass;
 
         // Can split (1)
         features[idx++] = bot.Mass >= GameConfig.MinSplitMass ? 1.0 : 0.0;
@@ -612,9 +601,6 @@ public class AIPlayerController : IAIController
 
     private double ComputeFitness(string botId, double score, double playerMassEaten, double killerMassShare = 0)
     {
-        var totalCells = (int)(GameConfig.MapSize / ExplorationGridSize) * (int)(GameConfig.MapSize / ExplorationGridSize);
-        var exploredCells = _visitedCells.TryGetValue(botId, out var visited) ? visited.Count : 0;
-        var explorationRatio = (double)exploredCells / totalCells;
         var monopolyPenalty = 1.0 - killerMassShare;
 
         // Reward aggression: player mass eaten counts double
@@ -626,7 +612,7 @@ public class AIPlayerController : IAIController
             : 1;
         var timeEfficiency = 1.0 / Math.Sqrt(aliveTicks);
 
-        return adjustedScore * timeEfficiency * explorationRatio * monopolyPenalty;
+        return adjustedScore * timeEfficiency * monopolyPenalty;
     }
 
     public void RandomizePlayerCount()
@@ -703,7 +689,6 @@ public class AIPlayerController : IAIController
             _botDifficulty.Remove(id);
             _spawnTick.Remove(id);
             _lastShotTick.Remove(id);
-            _visitedCells.Remove(id);
 
             // Remove split cells
             if (splitCellsByOwner.TryGetValue(id, out var cells))

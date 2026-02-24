@@ -11,6 +11,7 @@ public interface IGameHub
     Task Leaderboard(object data);
     Task FitnessStats(object data);
     Task ResetScores(object data);
+    Task BotViewUpdate(object data);
 }
 
 public class GameHub : Hub<IGameHub>
@@ -105,6 +106,9 @@ public class GameHub : Hub<IGameHub>
                 MergeAfterTick = _gameState.CurrentTick + GameConfig.MergeCooldownTicks
             };
 
+            splitCell.SpeedBoostMultiplier = GameConfig.SplitSpeed / GameConfig.BaseSpeed;
+            splitCell.SpeedBoostUntil = _gameState.CurrentTick + GameConfig.SpeedBoostDuration;
+
             _playerRepository.Add(splitCell);
         }
     }
@@ -150,6 +154,16 @@ public class GameHub : Hub<IGameHub>
         _gameState.Spectators[Context.ConnectionId] = true;
     }
 
+    public void EnableBotView(string botId)
+    {
+        _gameState.BotViewSpectators[Context.ConnectionId] = botId;
+    }
+
+    public void DisableBotView()
+    {
+        _gameState.BotViewSpectators.TryRemove(Context.ConnectionId, out _);
+    }
+
     public void ResetGame()
     {
         _gameEngine.RequestReset();
@@ -187,6 +201,7 @@ public class GameHub : Hub<IGameHub>
     public override Task OnDisconnectedAsync(Exception exception)
     {
         _gameState.Spectators.TryRemove(Context.ConnectionId, out _);
+        _gameState.BotViewSpectators.TryRemove(Context.ConnectionId, out _);
         foreach (var cell in _playerRepository.GetByOwner(Context.ConnectionId).ToList())
         {
             _playerRepository.Remove(cell.Id);
