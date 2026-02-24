@@ -41,6 +41,11 @@ builder.Services.ConfigureApplicationCookie(options => {
     options.AccessDeniedPath = "/admin/auth/login";
 });
 
+// Force lowercase URLs for Url.Action / tag helpers
+builder.Services.Configure<RouteOptions>(options => {
+    options.LowercaseUrls = true;
+});
+
 // MVC + Razor
 builder.Services.AddControllersWithViews()
     .AddRazorRuntimeCompilation();

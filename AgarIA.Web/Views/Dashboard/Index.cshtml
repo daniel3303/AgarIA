@@ -5,13 +5,13 @@
     <div class="stat bg-base-100 shadow rounded-box">
         <div class="stat-title">Game Speed</div>
         <div class="stat-value text-lg">
-            <span id="stat-tps">@Model.TicksPerSecond</span> TPS
-        </div>
-        <div class="stat-desc">
             <span id="stat-multiplier">@Model.SpeedMultiplier.ToString("0.#")</span>x speed
             @if (Model.MaxSpeed) {
                 <span class="badge badge-warning badge-xs ml-1">MAX</span>
             }
+        </div>
+        <div class="stat-desc">
+            <span id="stat-tps">@Model.TicksPerSecond</span> TPS
         </div>
     </div>
     <div class="stat bg-base-100 shadow rounded-box">
@@ -38,7 +38,7 @@
 </div>
 
 <!-- Genome fitness tables -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+<div class="grid grid-cols-3 gap-4 mb-6">
     <!-- Easy pool -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body p-4">
@@ -89,6 +89,31 @@
             </table>
             <div id="fitness-hard-summary" class="text-sm text-base-content/70 mt-2 hidden"></div>
         </div>
+    </div>
+</div>
+
+<!-- Win rate cards for last 100 games -->
+<h3 class="text-lg font-bold mb-4">Win Rates (Last 100 Games)</h3>
+<div id="winrate-cards" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Easy</div>
+        <div class="stat-value text-lg" id="wr-easy-pct">—</div>
+        <div class="stat-desc"><span id="wr-easy-wins">0</span> wins</div>
+    </div>
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Medium</div>
+        <div class="stat-value text-lg" id="wr-medium-pct">—</div>
+        <div class="stat-desc"><span id="wr-medium-wins">0</span> wins</div>
+    </div>
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Hard</div>
+        <div class="stat-value text-lg" id="wr-hard-pct">—</div>
+        <div class="stat-desc"><span id="wr-hard-wins">0</span> wins</div>
+    </div>
+    <div class="stat bg-base-100 shadow rounded-box">
+        <div class="stat-title">Human</div>
+        <div class="stat-value text-lg" id="wr-human-pct">—</div>
+        <div class="stat-desc"><span id="wr-human-wins">0</span> wins</div>
     </div>
 </div>
 
@@ -147,6 +172,13 @@
                         updateFitnessTable('medium', d.fitnessStats.medium);
                         updateFitnessTable('hard', d.fitnessStats.hard);
                     }
+                    // Update win rate cards
+                    if (d.winRates) {
+                        updateWinRate('easy', d.winRates.easy);
+                        updateWinRate('medium', d.winRates.medium);
+                        updateWinRate('hard', d.winRates.hard);
+                        updateWinRate('human', d.winRates.human);
+                    }
                 } catch (e) {
                     // Silently ignore fetch errors
                 }
@@ -177,6 +209,12 @@
                 summary.textContent = 'Avg: ' + data.average.toFixed(1)
                     + ' · Median: ' + data.median.toFixed(1)
                     + ' · Pool: ' + data.poolSize;
+            }
+
+            // Update a win rate stat card with wins count and percentage
+            function updateWinRate(key, data) {
+                document.getElementById('wr-' + key + '-pct').textContent = data.pct + '%';
+                document.getElementById('wr-' + key + '-wins').textContent = data.wins;
             }
 
             setInterval(refreshStats, 2000);

@@ -64,9 +64,39 @@ public class DashboardController : AdminBaseController
     }
 
     [HttpGet]
-    public IActionResult Stats() {
+    public async Task<IActionResult> Stats() {
         var alivePlayers = _playerRepository.GetAlive().Where(p => p.OwnerId == null).ToList();
         var tps = _gameEngine.CurrentTps;
+
+        // Compute win rates from last 100 completed rounds
+        var recentRounds = await _db.GameRounds
+            .Include(r => r.PlayerStats)
+            .OrderByDescending(r => r.EndedAt)
+            .Take(100)
+            .ToListAsync();
+
+        var winCounts = new Dictionary<string, int> {
+            ["easy"] = 0, ["medium"] = 0, ["hard"] = 0, ["human"] = 0
+        };
+        var totalCounts = new Dictionary<string, int> {
+            ["easy"] = 0, ["medium"] = 0, ["hard"] = 0, ["human"] = 0
+        };
+
+        foreach (var round in recentRounds) {
+            if (round.PlayerStats == null || round.PlayerStats.Count == 0) continue;
+
+            var winner = round.PlayerStats.OrderByDescending(p => p.FinalScore).First();
+            var category = ClassifyPlayer(winner);
+
+            foreach (var stat in round.PlayerStats) {
+                var cat = ClassifyPlayer(stat);
+                if (totalCounts.ContainsKey(cat))
+                    totalCounts[cat]++;
+            }
+
+            if (winCounts.ContainsKey(category))
+                winCounts[category]++;
+        }
 
         return Json(new {
             currentTick = _gameState.CurrentTick,
@@ -79,7 +109,20 @@ public class DashboardController : AdminBaseController
             ticksPerSecond = tps,
             speedMultiplier = Math.Round(tps / 20.0, 1),
             maxSpeed = _gameSettings.MaxSpeed,
-            fitnessStats = _aiController.GetFitnessStats()
+            fitnessStats = _aiController.GetFitnessStats(),
+            winRates = new {
+                easy = new { wins = winCounts["easy"], total = totalCounts["easy"], pct = totalCounts["easy"] > 0 ? Math.Round(100.0 * winCounts["easy"] / totalCounts["easy"], 1) : 0 },
+                medium = new { wins = winCounts["medium"], total = totalCounts["medium"], pct = totalCounts["medium"] > 0 ? Math.Round(100.0 * winCounts["medium"] / totalCounts["medium"], 1) : 0 },
+                hard = new { wins = winCounts["hard"], total = totalCounts["hard"], pct = totalCounts["hard"] > 0 ? Math.Round(100.0 * winCounts["hard"] / totalCounts["hard"], 1) : 0 },
+                human = new { wins = winCounts["human"], total = totalCounts["human"], pct = totalCounts["human"] > 0 ? Math.Round(100.0 * winCounts["human"] / totalCounts["human"], 1) : 0 }
+            }
         });
+    }
+
+    private static string ClassifyPlayer(PlayerGameStat player) {
+        if (player.Username != null && player.Username.StartsWith("(E)")) return "easy";
+        if (player.Username != null && player.Username.StartsWith("(M)")) return "medium";
+        if (player.Username != null && player.Username.StartsWith("(H)")) return "hard";
+        return "human";
     }
 }

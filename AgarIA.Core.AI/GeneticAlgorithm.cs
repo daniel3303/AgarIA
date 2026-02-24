@@ -15,7 +15,7 @@ public class GeneticAlgorithm
     private DateTime _lastDecay = DateTime.UtcNow;
     private int _elitesRemaining;
 
-    private const int PoolCapacity = 200;
+    private const int PoolCapacity = 40;
     private const double BaseMutationRate = 0.10;
     private const int BaseGenomeSize = 10_374;
     private const double MinMutationRate = 0.01;
