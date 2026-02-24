@@ -61,9 +61,11 @@ In spectate mode you can observe the AI bots competing and evolving in real time
 - **Mouse wheel** — Zoom in/out
 - **Reset at score** — Automatically reset the game when any player reaches a score threshold (forces new generations)
 - **Max Speed** — Run the simulation without tick delay for faster evolution
-- **Hide Game** — Disables canvas rendering to save resources, showing only the leaderboard and fitness stats (top 10)
+## Admin Dashboard
 
-![Stats View](docs/screenshots/stats-view.png)
+![Admin Dashboard](docs/screenshots/admin-dashboard.png)
+
+The project includes a password-protected admin panel at `/admin/` for monitoring the simulation, adjusting game settings, and viewing round history.
 
 ## AI Architecture
 
@@ -129,28 +131,6 @@ fitness = (score + playerMassEaten) × (1 / sqrt(aliveTicks)) × monopolyPenalty
 ### Genome Persistence
 
 Evolved neural network weights auto-save to `ai_genomes_easy.json` and `ai_genomes_medium.json` every 60 seconds. Each tier has its own genome file. These files persist across server restarts, allowing evolution to continue across sessions. Delete them to start fresh.
-
-## Admin Dashboard
-
-The project includes a password-protected admin panel for managing game settings, viewing history, and monitoring the simulation.
-
-### Features
-
-- **Collapsible sidebar** with icon-based navigation (Dashboard, Settings, Game History)
-- **Dark/light theme toggle** — persists across sessions via `localStorage`
-- **Sidebar state memory** — collapse/expand state persists via `localStorage`
-- **Responsive layout** — mobile hamburger menu, sticky top navbar
-- **HeroIcon tag helper** — inline SVG icons via `<icon name="..." size="5" />` syntax
-
-### Building Admin CSS
-
-The admin UI uses Tailwind CSS v4 with DaisyUI v5, built via Vite:
-
-```bash
-cd AgarIA.Web
-npm run build       # One-time production build
-npm run dev         # Watch mode for development
-```
 
 ## Tech Stack
 
