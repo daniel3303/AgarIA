@@ -45,9 +45,7 @@
 
             <!-- Page content -->
             <main class="flex-1 p-4 lg:p-6">
-                @if (TempData["Success"] != null) {
-                    <div class="alert mb-4">@TempData["Success"]</div>
-                }
+                <partial name="_FlashMessages" />
                 <div class="card bg-base-100 shadow-sm">
                     <div class="card-body p-4 lg:p-6">
                         @RenderBody()
@@ -187,6 +185,7 @@
         document.getElementById('sidebar-expand').addEventListener('click', function() { toggleSidebar(true); });
     </script>
 
+    <script src="~/dist/mvc-grid.js" asp-append-version="true"></script>
     @RenderSection("Scripts", false)
 </body>
 </html>

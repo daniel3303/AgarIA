@@ -5,6 +5,7 @@ using AgarIA.Core.Game;
 using AgarIA.Core.Repositories;
 using AgarIA.Web.Data;
 using AgarIA.Web.Services;
+using AgarIA.Web.Services.FlashMessage;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -45,6 +46,10 @@ builder.Services.ConfigureApplicationCookie(options => {
 builder.Services.Configure<RouteOptions>(options => {
     options.LowercaseUrls = true;
 });
+
+// Flash messages
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddFlashMessage();
 
 // MVC + Razor
 builder.Services.AddControllersWithViews()

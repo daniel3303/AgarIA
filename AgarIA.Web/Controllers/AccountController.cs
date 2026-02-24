@@ -1,5 +1,6 @@
 using AgarIA.Web.Controllers.Abstract;
 using AgarIA.Web.Dtos;
+using AgarIA.Web.Services.FlashMessage.Contracts;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,9 +8,11 @@ namespace AgarIA.Web.Controllers;
 
 public class AccountController : AdminBaseController {
     private readonly UserManager<IdentityUser> _userManager;
+    private readonly IFlashMessage _flashMessage;
 
-    public AccountController(UserManager<IdentityUser> userManager) {
+    public AccountController(UserManager<IdentityUser> userManager, IFlashMessage flashMessage) {
         _userManager = userManager;
+        _flashMessage = flashMessage;
     }
 
     [HttpGet]
@@ -40,7 +43,7 @@ public class AccountController : AdminBaseController {
             return View(dto);
         }
 
-        TempData["Success"] = "Password changed successfully.";
+        _flashMessage.Success("Password changed successfully.");
         return RedirectToAction(nameof(ChangePassword));
     }
 }

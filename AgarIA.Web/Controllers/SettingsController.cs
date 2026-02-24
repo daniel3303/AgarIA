@@ -4,6 +4,7 @@ using AgarIA.Core.Game;
 using AgarIA.Web.Controllers.Abstract;
 using AgarIA.Web.Data;
 using AgarIA.Web.Services;
+using AgarIA.Web.Services.FlashMessage.Contracts;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgarIA.Web.Controllers;
@@ -14,16 +15,19 @@ public class SettingsController : AdminBaseController
     private readonly GameEngine _gameEngine;
     private readonly AIPlayerController _aiController;
     private readonly AdminDbContext _db;
+    private readonly IFlashMessage _flashMessage;
 
     public SettingsController(
         GameSettings gameSettings,
         GameEngine gameEngine,
         AIPlayerController aiController,
-        AdminDbContext db) {
+        AdminDbContext db,
+        IFlashMessage flashMessage) {
         _gameSettings = gameSettings;
         _gameEngine = gameEngine;
         _aiController = aiController;
         _db = db;
+        _flashMessage = flashMessage;
     }
 
     public IActionResult Index() {
@@ -63,7 +67,7 @@ public class SettingsController : AdminBaseController
         // Persist to database
         await AdminSettingsService.Save(_db, _gameSettings);
 
-        TempData["Success"] = "Settings updated successfully.";
+        _flashMessage.Success("Settings updated successfully.");
         return RedirectToAction(nameof(Index));
     }
 
@@ -74,7 +78,7 @@ public class SettingsController : AdminBaseController
         var parsed = ParseHiddenLayers(input);
         if (parsed == null)
         {
-            TempData["Error"] = $"Invalid {tier} hidden layers format. Use comma-separated positive integers (e.g. 128 or 128,64).";
+            _flashMessage.Error($"Invalid {tier} hidden layers format. Use comma-separated positive integers (e.g. 128 or 128,64).");
             return;
         }
 
@@ -104,7 +108,7 @@ public class SettingsController : AdminBaseController
     [ValidateAntiForgeryToken]
     public IActionResult ResetGame() {
         _gameEngine.RequestReset();
-        TempData["Success"] = "Game reset requested.";
+        _flashMessage.Success("Game reset requested.");
         return RedirectToAction(nameof(Index));
     }
 }
