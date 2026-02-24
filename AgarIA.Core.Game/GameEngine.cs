@@ -28,16 +28,20 @@ public class GameEngine : IHostedService, IDisposable
     private readonly ManualResetEventSlim _tickComplete = new(true);
     private volatile bool _resetRequested;
     private volatile bool _maxSpeed;
+    private Thread _maxSpeedThread;
     private int _tickRunning;
     private long _tpsCount;
     private long _lastTpsMeasure = Stopwatch.GetTimestamp();
     private volatile int _currentTps;
-    private readonly double[] _phaseTimesMs = new double[10];
-    private readonly string[] _phaseNames = ["MovePlayers", "MoveProjectiles", "RebuildGrids", "ProjCollisions", "FoodCollisions", "PlayerCollisions", "Merges", "DecayMass", "AITick", "Broadcast"];
+    private readonly double[] _phaseTimesMs = new double[8];
+    private readonly string[] _phaseNames = ["MovePlayers", "MoveProjectiles", "RebuildGrids", "Collisions", "ApplyResults", "DecayMass", "AITick", "Broadcast"];
+    private double _totalTickTimeMs;
     private long _resetIntervalTicks;
     private long _lastResetTick;
     private long _roundStartTick;
     private readonly List<object> _resetScoreHistory = new();
+    private HashSet<int> _previousFoodIds = new();
+    private int _fullFoodSyncCounter;
 
     public GameEngine(
         GameState gameState,
@@ -77,6 +81,8 @@ public class GameEngine : IHostedService, IDisposable
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Game engine stopping");
+        _maxSpeed = false;
+        _maxSpeedThread?.Join(TimeSpan.FromSeconds(2));
         _gameTimer?.Change(Timeout.Infinite, 0);
         _leaderboardTimer?.Change(Timeout.Infinite, 0);
         _tickComplete.Wait(TimeSpan.FromSeconds(2));
@@ -108,6 +114,7 @@ public class GameEngine : IHostedService, IDisposable
                 PerformReset();
             }
 
+            var tickStart = Stopwatch.GetTimestamp();
             long ts;
 
             ts = Stopwatch.GetTimestamp();
@@ -131,40 +138,49 @@ public class GameEngine : IHostedService, IDisposable
             var projList = _projectileRepository.GetAlive().ToList();
 
             Parallel.Invoke(
-                () => { var t = Stopwatch.GetTimestamp(); foodHits = _collisionManager.CheckFoodCollisions(); _phaseTimesMs[4] += Stopwatch.GetElapsedTime(t).TotalMilliseconds; },
-                () => { var t = Stopwatch.GetTimestamp(); projHits = _collisionManager.CheckProjectileCollisions(projList); _phaseTimesMs[3] += Stopwatch.GetElapsedTime(t).TotalMilliseconds; },
-                () => { var t = Stopwatch.GetTimestamp(); playerKills = _collisionManager.CheckPlayerCollisions(); _phaseTimesMs[5] += Stopwatch.GetElapsedTime(t).TotalMilliseconds; },
-                () => { var t = Stopwatch.GetTimestamp(); merges = _collisionManager.CheckMerges(); _phaseTimesMs[6] += Stopwatch.GetElapsedTime(t).TotalMilliseconds; }
+                () => foodHits = _collisionManager.CheckFoodCollisions(),
+                () => projHits = _collisionManager.CheckProjectileCollisions(projList),
+                () => playerKills = _collisionManager.CheckPlayerCollisions(),
+                () => merges = _collisionManager.CheckMerges()
             );
+            _phaseTimesMs[3] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             // Apply results sequentially (mutations)
+            ts = Stopwatch.GetTimestamp();
             ApplyProjectileCollisions(projHits);
             ApplyFoodCollisions(foodHits);
             ApplyPlayerCollisions(playerKills);
             ApplyMerges(merges);
+            _phaseTimesMs[4] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             ts = Stopwatch.GetTimestamp();
             DecayMass();
             SpawnFood();
-            _phaseTimesMs[7] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            _phaseTimesMs[5] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             ts = Stopwatch.GetTimestamp();
             var scoreTriggered = _aiController.Tick(_gameState.CurrentTick);
-            _phaseTimesMs[8] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            _phaseTimesMs[6] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             ts = Stopwatch.GetTimestamp();
             BroadcastGameState();
-            _phaseTimesMs[9] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            _phaseTimesMs[7] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            _totalTickTimeMs += Stopwatch.GetElapsedTime(tickStart).TotalMilliseconds;
 
             if (_tpsCount == 0)
             {
-                var parts = new string[10];
-                for (int pi = 0; pi < 10; pi++)
+                var parts = new string[8];
+                double phasesSum = 0;
+                for (int pi = 0; pi < 8; pi++)
                 {
                     parts[pi] = $"{_phaseNames[pi]}={_phaseTimesMs[pi]:F1}ms";
+                    phasesSum += _phaseTimesMs[pi];
                     _phaseTimesMs[pi] = 0;
                 }
-                _logger.LogInformation("Tick breakdown (last 1s): {Breakdown} | Players={PlayerCount}", string.Join(" | ", parts), _playerRepository.GetAlive().Count());
+                var overhead = _totalTickTimeMs - phasesSum;
+                _logger.LogInformation("Tick breakdown (last 1s): {Breakdown} | Overhead={Overhead:F1}ms | Total={Total:F1}ms | TPS={TPS} | Players={PlayerCount}", string.Join(" | ", parts), overhead, _totalTickTimeMs, _currentTps, _playerRepository.GetAlive().Count());
+                _totalTickTimeMs = 0;
                 _logger.LogInformation("  AI detail: {AIBreakdown}", _aiController.GetTickBreakdown());
             }
 
@@ -407,13 +423,29 @@ public class GameEngine : IHostedService, IDisposable
     {
         var alivePlayers = _playerRepository.GetAlive().ToList();
 
+        // Skip entire broadcast if no humans or spectators are connected
+        var hasHumans = alivePlayers.Any(p => !p.IsAI && p.OwnerId == null);
+        if (!hasHumans && _gameState.Spectators.IsEmpty && _gameState.BotViewSpectators.IsEmpty)
+            return;
+
         // Build DTOs in parallel
         object[] players = null;
-        List<FoodDto> food = null;
         object[] projectilesDtos = null;
+        List<FoodDto> addedFood = null;
+        List<int> removedFoodIds = null;
+        List<FoodDto> fullFood = null;
+        bool sendFullFood = false;
 
         var currentTick = _gameState.CurrentTick;
         var aliveProjectiles = _projectileRepository.GetAlive().ToList();
+
+        // Determine if this is a full food sync tick (every 100 ticks = 5 seconds)
+        _fullFoodSyncCounter++;
+        if (_fullFoodSyncCounter >= 100)
+        {
+            _fullFoodSyncCounter = 0;
+            sendFullFood = true;
+        }
 
         Parallel.Invoke(
             () =>
@@ -440,9 +472,37 @@ public class GameEngine : IHostedService, IDisposable
             () =>
             {
                 var allFood = _foodRepository.GetAll().ToList();
-                food = new List<FoodDto>(allFood.Count);
-                foreach (var f in allFood)
-                    food.Add(new FoodDto(f.Id, f.X, f.Y, f.ColorIndex));
+                var currentFoodIds = new HashSet<int>(allFood.Count);
+
+                if (sendFullFood)
+                {
+                    fullFood = new List<FoodDto>(allFood.Count);
+                    foreach (var f in allFood)
+                    {
+                        fullFood.Add(new FoodDto(f.Id, f.X, f.Y, f.ColorIndex));
+                        currentFoodIds.Add(f.Id);
+                    }
+                }
+                else
+                {
+                    addedFood = new List<FoodDto>();
+                    removedFoodIds = new List<int>();
+
+                    foreach (var f in allFood)
+                    {
+                        currentFoodIds.Add(f.Id);
+                        if (!_previousFoodIds.Contains(f.Id))
+                            addedFood.Add(new FoodDto(f.Id, f.X, f.Y, f.ColorIndex));
+                    }
+
+                    foreach (var oldId in _previousFoodIds)
+                    {
+                        if (!currentFoodIds.Contains(oldId))
+                            removedFoodIds.Add(oldId);
+                    }
+                }
+
+                _previousFoodIds = currentFoodIds;
             },
             () =>
             {
@@ -471,30 +531,38 @@ public class GameEngine : IHostedService, IDisposable
                 humanPlayers.Count, string.Join(", ", humanPlayers.Select(p => p.Id)));
         }
 
-        var spectatorUpdate = new
+        // Build shared update (no "you" field — humans get YouAre separately)
+        object sharedUpdate;
+        if (sendFullFood)
         {
-            players,
-            food,
-            projectiles,
-            you = (string)null,
-            tick = _gameState.CurrentTick
-        };
-
-        foreach (var player in humanPlayers)
-        {
-            _hubContext.Clients.Client(player.Id).GameUpdate(new
+            sharedUpdate = new
             {
                 players,
-                food,
+                food = fullFood,
                 projectiles,
-                you = player.Id,
                 tick = _gameState.CurrentTick
-            });
+            };
+        }
+        else
+        {
+            sharedUpdate = new
+            {
+                players,
+                addedFood,
+                removedFoodIds,
+                projectiles,
+                tick = _gameState.CurrentTick
+            };
         }
 
-        foreach (var spectatorId in _gameState.Spectators.Keys)
+        // Single group broadcast for humans and spectators (same data)
+        _hubContext.Clients.Group("humans").GameUpdate(sharedUpdate);
+        _hubContext.Clients.Group("spectators").GameUpdate(sharedUpdate);
+
+        // Send per-player YouAre with just their connection ID
+        foreach (var player in humanPlayers)
         {
-            _hubContext.Clients.Client(spectatorId).GameUpdate(spectatorUpdate);
+            _hubContext.Clients.Client(player.Id).YouAre(player.Id);
         }
 
         // Send bot view perception data to subscribed spectators
@@ -556,8 +624,34 @@ public class GameEngine : IHostedService, IDisposable
     {
         _gameSettings.MaxSpeed = enabled;
         _maxSpeed = enabled;
-        var interval = enabled ? 1 : 1000 / GameConfig.TickRate;
-        _gameTimer?.Change(0, interval);
+
+        if (enabled)
+        {
+            // Stop the timer and use a dedicated spin thread instead
+            _gameTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+
+            if (_maxSpeedThread == null || !_maxSpeedThread.IsAlive)
+            {
+                _maxSpeedThread = new Thread(() =>
+                {
+                    while (_maxSpeed)
+                    {
+                        Tick(null);
+                    }
+                })
+                {
+                    IsBackground = true,
+                    Name = "MaxSpeedTick"
+                };
+                _maxSpeedThread.Start();
+            }
+        }
+        else
+        {
+            // Resume normal timer-based ticking
+            _gameTimer?.Change(0, 1000 / GameConfig.TickRate);
+        }
+
         _logger.LogInformation("Max speed {State}", enabled ? "enabled" : "disabled");
     }
 

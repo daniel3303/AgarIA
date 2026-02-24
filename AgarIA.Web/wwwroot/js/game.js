@@ -9,6 +9,8 @@
     let followedBotId = null;
     let botViewData = null;
     let firstUpdateReceived = false;
+    let myConnectionId = null;
+    const foodMap = new Map(); // id -> {id, x, y, colorIndex}
     const camera = { x: 2000, y: 2000, zoom: 1 };
     const spectatorKeys = {};
 
@@ -33,7 +35,8 @@
         onReconnected: handleReconnected,
         onFitnessStats: handleFitnessStats,
         onResetScores: handleResetScores,
-        onBotViewUpdate: handleBotViewUpdate
+        onBotViewUpdate: handleBotViewUpdate,
+        onYouAre: handleYouAre
     }).then(() => {
         console.log("Connected to game server");
     });
@@ -104,23 +107,54 @@
             Network.spectate().then(() => {
                 console.log("Re-registered as spectator");
                 prevState = null;
-                firstUpdateReceived = false;
             });
         } else if (currentUsername) {
             Network.join(currentUsername).then(() => {
                 console.log("Rejoined as", currentUsername);
                 prevState = null;
-                firstUpdateReceived = false;
             });
         }
+    }
+
+    // Receive YouAre message with our connection ID
+    function handleYouAre(connectionId) {
+        myConnectionId = connectionId;
     }
 
     // Receive game state from server, store for interpolation
     function handleGameUpdate(data) {
         if (!firstUpdateReceived) {
             firstUpdateReceived = true;
-            console.log("First game update received:", data.players?.length, "players,", data.food?.length, "food");
+            console.log("First game update received:", data.players?.length, "players");
         }
+
+        // Food delta handling
+        if (data.food) {
+            // Full sync — replace entire foodMap
+            foodMap.clear();
+            for (const f of data.food) {
+                foodMap.set(f.id, f);
+            }
+        } else {
+            // Delta update
+            if (data.addedFood) {
+                for (const f of data.addedFood) {
+                    foodMap.set(f.id, f);
+                }
+            }
+            if (data.removedFoodIds) {
+                for (const id of data.removedFoodIds) {
+                    foodMap.delete(id);
+                }
+            }
+        }
+
+        // Build food array from map for rendering
+        data.food = Array.from(foodMap.values());
+
+        // Set "you" from YouAre messages
+        data.you = myConnectionId;
+
         prevState = gameState;
         gameState = data;
         lastUpdateTime = performance.now();

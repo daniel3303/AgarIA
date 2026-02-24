@@ -8,6 +8,7 @@ const Network = (() => {
     let onFitnessStats = null;
     let onResetScores = null;
     let onBotViewUpdate = null;
+    let onYouAre = null;
 
     // Build SignalR connection to game hub
     function init(callbacks) {
@@ -18,6 +19,7 @@ const Network = (() => {
         onFitnessStats = callbacks.onFitnessStats;
         onResetScores = callbacks.onResetScores;
         onBotViewUpdate = callbacks.onBotViewUpdate;
+        onYouAre = callbacks.onYouAre;
 
         connection = new signalR.HubConnectionBuilder()
             .withUrl("/gamehub")
@@ -50,6 +52,11 @@ const Network = (() => {
         // Receive bot view perception data
         connection.on("BotViewUpdate", (data) => {
             if (onBotViewUpdate) onBotViewUpdate(data);
+        });
+
+        // Receive player identity (connection ID)
+        connection.on("YouAre", (connectionId) => {
+            if (onYouAre) onYouAre(connectionId);
         });
 
         connection.onreconnected(() => {

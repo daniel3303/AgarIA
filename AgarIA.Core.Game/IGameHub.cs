@@ -12,6 +12,7 @@ public interface IGameHub
     Task FitnessStats(object data);
     Task ResetScores(object data);
     Task BotViewUpdate(object data);
+    Task YouAre(string connectionId);
 }
 
 public class GameHub : Hub<IGameHub>
@@ -33,6 +34,12 @@ public class GameHub : Hub<IGameHub>
 
     public async Task Join(string username)
     {
+        // Remove from spectators group if switching from spectate to play
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, "spectators");
+        _gameState.Spectators.TryRemove(Context.ConnectionId, out _);
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, "humans");
+
         var player = new Player
         {
             Id = Context.ConnectionId,
@@ -149,8 +156,12 @@ public class GameHub : Hub<IGameHub>
         _projectileRepository.Add(projectile);
     }
 
-    public void Spectate()
+    public async Task Spectate()
     {
+        // Remove from humans group if switching from play to spectate
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, "humans");
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, "spectators");
         _gameState.Spectators[Context.ConnectionId] = true;
     }
 
