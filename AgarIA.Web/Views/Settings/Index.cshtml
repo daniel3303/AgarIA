@@ -1,87 +1,122 @@
 @using AgarIA.Core.Data.Models
 @model GameSettings
 
-<div class="card bg-base-100 shadow-sm">
-    <div class="card-body">
-        <h2 class="card-title mb-4">Game Settings</h2>
-
-        <form asp-action="Update">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <fieldset class="fieldset">
-                    <legend class="fieldset-legend">Min AI Players</legend>
-                    <input type="number" asp-for="MinAIPlayers" class="input w-full" min="0" max="500" />
-                </fieldset>
-
-                <fieldset class="fieldset">
-                    <legend class="fieldset-legend">Max AI Players</legend>
-                    <input type="number" asp-for="MaxAIPlayers" class="input w-full" min="0" max="500" />
-                </fieldset>
-
-                <fieldset class="fieldset col-span-full">
-                    <legend class="fieldset-legend">Reset Type</legend>
-                    <div class="flex gap-4">
-                        @foreach (var rt in Enum.GetValues<ResetType>())
-                        {
-                            <label class="label cursor-pointer gap-2">
-                                <input type="radio" name="ResetType" value="@rt" class="radio"
-                                       checked="@(Model.ResetType == rt)" data-reset-type="@rt" />
-                                <span>@rt</span>
-                            </label>
-                        }
+<form asp-action="Update">
+    <div class="grid grid-cols-12 gap-6">
+        <!-- Left column: Game settings -->
+        <div class="col-span-12 lg:col-span-7">
+            <!-- AI Players card -->
+            <div class="card bg-base-100 border border-base-200 mb-4">
+                <div class="card-body p-4">
+                    <h3 class="font-semibold text-sm">AI Players</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Min Players</legend>
+                            <input type="number" asp-for="MinAIPlayers" class="input w-full" min="0" max="500" />
+                        </fieldset>
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Max Players</legend>
+                            <input type="number" asp-for="MaxAIPlayers" class="input w-full" min="0" max="500" />
+                        </fieldset>
                     </div>
-                </fieldset>
-
-                <fieldset class="fieldset reset-field" data-for="MaxScore">
-                    <legend class="fieldset-legend">Reset at Score</legend>
-                    <input type="number" asp-for="ResetAtScore" class="input w-full" min="100" step="100" />
-                </fieldset>
-
-                <fieldset class="fieldset reset-field" data-for="MaxTime">
-                    <legend class="fieldset-legend">Auto Reset (seconds)</legend>
-                    <input type="number" asp-for="AutoResetSeconds" class="input w-full" min="0" />
-                </fieldset>
-
-                <fieldset class="fieldset">
-                    <legend class="fieldset-legend">Max Speed</legend>
-                    <input type="checkbox" asp-for="MaxSpeed" class="toggle" />
-                </fieldset>
+                </div>
             </div>
 
-            <div class="divider">Neural Network Architecture</div>
+            <!-- Game Reset card -->
+            <div class="card bg-base-100 border border-base-200 mb-4">
+                <div class="card-body p-4">
+                    <h3 class="font-semibold text-sm">Game Reset</h3>
+                    <p class="text-xs text-base-content/60 mb-3">Configure when the game resets and a new round begins.</p>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <fieldset class="fieldset">
-                    <legend class="fieldset-legend">Easy Hidden Layers</legend>
-                    <input type="text" name="easyHiddenLayers" class="input w-full"
-                           value="@string.Join(",", Model.EasyHiddenLayers)" placeholder="e.g. 64 or 128,64" />
-                </fieldset>
+                    <fieldset class="fieldset mb-3">
+                        <legend class="fieldset-legend">Reset Type</legend>
+                        <div class="flex gap-4">
+                            @foreach (var rt in Enum.GetValues<ResetType>())
+                            {
+                                <label class="label cursor-pointer gap-2">
+                                    <input type="radio" name="ResetType" value="@rt" class="radio radio-sm"
+                                           checked="@(Model.ResetType == rt)" data-reset-type="@rt" />
+                                    <span class="label-text">@rt</span>
+                                </label>
+                            }
+                        </div>
+                    </fieldset>
 
-                <fieldset class="fieldset">
-                    <legend class="fieldset-legend">Medium Hidden Layers</legend>
-                    <input type="text" name="mediumHiddenLayers" class="input w-full"
-                           value="@string.Join(",", Model.MediumHiddenLayers)" placeholder="e.g. 128 or 128,64" />
-                </fieldset>
-
-                <fieldset class="fieldset">
-                    <legend class="fieldset-legend">Hard Hidden Layers</legend>
-                    <input type="text" name="hardHiddenLayers" class="input w-full"
-                           value="@string.Join(",", Model.HardHiddenLayers)" placeholder="e.g. 256 or 256,128" />
-                </fieldset>
+                    <div class="grid grid-cols-2 gap-3">
+                        <fieldset class="fieldset reset-field" data-for="MaxScore">
+                            <legend class="fieldset-legend">Reset at Score</legend>
+                            <input type="number" asp-for="ResetAtScore" class="input w-full" min="100" step="100" />
+                        </fieldset>
+                        <fieldset class="fieldset reset-field" data-for="MaxTime">
+                            <legend class="fieldset-legend">Auto Reset (seconds)</legend>
+                            <input type="number" asp-for="AutoResetSeconds" class="input w-full" min="0" />
+                        </fieldset>
+                    </div>
+                </div>
             </div>
-            <p class="text-sm text-base-content/50 mt-1">Changing architecture deletes the genome file and resets training for that tier.</p>
 
-            <div class="mt-6 flex gap-2">
-                <button type="submit" class="btn btn-neutral">Save Settings</button>
+            <!-- Neural Network Architecture card -->
+            <div class="card bg-base-100 border border-base-200 mb-4">
+                <div class="card-body p-4">
+                    <h3 class="font-semibold text-sm">Neural Network Architecture</h3>
+                    <p class="text-xs text-base-content/60 mb-3">Hidden layer sizes per tier. Use comma-separated values for multiple layers (e.g. 128,64). Changing architecture deletes the genome file and resets training.</p>
+
+                    <div class="grid grid-cols-3 gap-3">
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Easy</legend>
+                            <input type="text" name="easyHiddenLayers" class="input w-full"
+                                   value="@string.Join(",", Model.EasyHiddenLayers)" placeholder="64" />
+                        </fieldset>
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Medium</legend>
+                            <input type="text" name="mediumHiddenLayers" class="input w-full"
+                                   value="@string.Join(",", Model.MediumHiddenLayers)" placeholder="128" />
+                        </fieldset>
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Hard</legend>
+                            <input type="text" name="hardHiddenLayers" class="input w-full"
+                                   value="@string.Join(",", Model.HardHiddenLayers)" placeholder="256" />
+                        </fieldset>
+                    </div>
+                </div>
             </div>
-        </form>
+        </div>
 
-        <div class="divider"></div>
+        <!-- Right column: Speed + actions -->
+        <div class="col-span-12 lg:col-span-5">
+            <!-- Simulation card -->
+            <div class="card bg-base-100 border border-base-200 mb-4">
+                <div class="card-body p-4">
+                    <h3 class="font-semibold text-sm">Simulation</h3>
+                    <label class="label cursor-pointer justify-start gap-3">
+                        <input type="checkbox" asp-for="MaxSpeed" class="checkbox checkbox-sm" />
+                        <span class="label-text">Max Speed</span>
+                    </label>
+                    <p class="text-xs text-base-content/60 mt-1">Run without tick delay for faster evolution.</p>
+                </div>
+            </div>
 
-        <form asp-action="ResetGame">
-            <button type="submit" class="btn btn-error" onclick="return confirm('Reset the game now?')">Reset Game Now</button>
-        </form>
+            <!-- Danger Zone card -->
+            <div class="card bg-base-100 border border-error/30 mb-4">
+                <div class="card-body p-4">
+                    <h3 class="font-semibold text-sm text-error">Danger Zone</h3>
+                    <p class="text-xs text-base-content/60 mb-3">Force an immediate game reset. All bots respawn and a new round begins.</p>
+                    <button type="button" id="resetGameBtn" class="btn btn-error btn-sm btn-outline">
+                        Reset Game Now
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
-</div>
+
+    <!-- Save button -->
+    <div class="flex justify-end mt-2">
+        <button class="btn btn-neutral" type="submit">Save Settings</button>
+    </div>
+</form>
+
+<!-- Separate form for game reset to avoid mixing with settings update -->
+<form id="resetGameForm" asp-action="ResetGame" style="display:none"></form>
 
 <script>
     // Toggle visibility of reset-specific fields based on selected reset type
@@ -95,4 +130,11 @@
     document.querySelectorAll('input[name="ResetType"]').forEach(r =>
         r.addEventListener('change', updateResetFields));
     updateResetFields();
+
+    // Confirm before resetting game
+    document.getElementById('resetGameBtn').addEventListener('click', () => {
+        if (confirm('Reset the game now? All bots will respawn.')) {
+            document.getElementById('resetGameForm').submit();
+        }
+    });
 </script>
