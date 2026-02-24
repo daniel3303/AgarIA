@@ -69,41 +69,42 @@ In spectate mode you can observe the AI bots competing and evolving in real time
 
 ### Neural Network
 
-Each AI bot is controlled by a feedforward neural network with the following architecture:
+Each AI bot is controlled by a feedforward neural network. Bots are split 50/50 into two tiers:
+
+- **Easy** `(E)` — 1 hidden layer, genome size: **4,742 weights**
+- **Medium** `(M)` — 2 hidden layers, genome size: **8,902 weights**
 
 ```
-119 inputs → 64 hidden (tanh) → 64 hidden (tanh) → 12 outputs
+Easy:   67 inputs → 64 hidden (tanh) → 6 outputs
+Medium: 67 inputs → 64 hidden (tanh) → 64 hidden (tanh) → 6 outputs
 ```
 
-**Total genome size: 12,620 weights** (including biases)
-
-#### Input Features (119)
+#### Input Features (67)
 
 | Feature Group | Count | Description |
 |---------------|-------|-------------|
-| Self info | 6 | Own mass (normalized), can-split flag, two largest cells' positions |
-| Nearest food | 10 | 5 closest food items (dx, dy each) |
-| Nearest players | 90 | 30 closest players (dx, dy, relative mass each) |
-| Largest threat | 3 | Largest player (dx, dy, relative mass) |
+| Self info | 7 | Mass relative to largest, absolute mass (1/mass), can-split flag, two largest cells' positions |
+| Nearest food | 20 | 10 closest food items (dx, dy each) |
+| Nearest players | 30 | 10 closest players (dx, dy, relative mass each) |
 | Nearest projectiles | 10 | 5 closest projectiles (dx, dy each) |
 
-#### Output Decisions (12)
+#### Output Decisions (6)
 
 | Output | Description |
 |--------|-------------|
-| 0-7 | Movement direction (8 directions, highest wins) |
-| 8 | Split decision (> 0.5 triggers split) |
-| 9 | Shoot decision (> 0.5 triggers shoot) |
-| 10-11 | Shoot direction (dx, dy) |
+| 0-1 | Movement direction (continuous X, Y via tanh, scaled to ±200px offset) |
+| 2 | Split decision (> 0.5 triggers split) |
+| 3 | Shoot decision (> 0.5 triggers shoot) |
+| 4-5 | Shoot direction (dx, dy) |
 
 ### Genetic Algorithm
 
-The AI evolves through a genetic algorithm with a pool of **50 genomes**:
+Each tier has its own independent genetic algorithm with a pool of **200 genomes**:
 
-- **Selection**: Tournament selection (pick 3 random, keep the fittest)
+- **Selection**: Tournament selection (pick 12 random, keep the fittest)
 - **Crossover**: 70% chance — each weight randomly inherited from either parent
 - **Mutation**: 10% chance per weight — Gaussian noise (sigma = 0.3)
-- **Pool management**: When pool exceeds 50, the lowest-fitness genome is removed. Duplicate genomes are prevented — if a genome already exists in the pool, only the higher fitness is kept
+- **Pool management**: When pool exceeds 200, the lowest-fitness genome is removed. Duplicate genomes are prevented — if a genome already exists in the pool, only the higher fitness is kept
 - **Live checkpoints**: Every 30 seconds, all live bots report their current fitness to the pool. This ensures long-surviving dominant bots keep their genomes competitive without waiting until death
 
 #### Fitness Decay
@@ -115,7 +116,7 @@ Every 30 seconds, all existing pool entries are multiplied by **0.95**. This pre
 The fitness function is designed to reward aggressive, efficient play:
 
 ```
-fitness = (score + playerMassEaten) × (1 / sqrt(aliveTicks)) × explorationRatio × monopolyPenalty
+fitness = (score + playerMassEaten) × (1 / sqrt(aliveTicks)) × monopolyPenalty
 ```
 
 | Component | Description |
@@ -123,12 +124,11 @@ fitness = (score + playerMassEaten) × (1 / sqrt(aliveTicks)) × explorationRati
 | **score** | Final mass at death (already includes mass eaten from players) |
 | **playerMassEaten** | Mass gained specifically from eating other players — counted again as a 2x bonus to reward aggression |
 | **1 / sqrt(aliveTicks)** | Time efficiency factor — rewards bots that gain mass quickly rather than surviving passively |
-| **explorationRatio** | Fraction of map grid cells visited (100x100 grid) — prevents bots from camping in one spot |
 | **monopolyPenalty** | `1.0 - killerMassShare` — if the killer had most of the total mass, the victim's genome isn't penalized as harshly |
 
 ### Genome Persistence
 
-Evolved neural network weights auto-save to `ai_genomes.json` every 60 seconds. This file persists across server restarts, allowing evolution to continue across sessions. Delete it to start fresh.
+Evolved neural network weights auto-save to `ai_genomes_easy.json` and `ai_genomes_medium.json` every 60 seconds. Each tier has its own genome file. These files persist across server restarts, allowing evolution to continue across sessions. Delete them to start fresh.
 
 ## Admin Dashboard
 
