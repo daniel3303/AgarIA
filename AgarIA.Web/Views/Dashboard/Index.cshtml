@@ -38,11 +38,11 @@
 </div>
 
 <!-- Genome fitness tables -->
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
     <!-- Easy pool -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body p-4">
-            <h3 class="card-title text-base">Easy (1-layer)</h3>
+            <h3 class="card-title text-base">Easy</h3>
             <div id="fitness-easy-empty" class="text-base-content/50 text-sm py-4 text-center">No data yet</div>
             <table id="fitness-easy-table" class="table table-zebra table-sm hidden">
                 <thead>
@@ -59,7 +59,7 @@
     <!-- Medium pool -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body p-4">
-            <h3 class="card-title text-base">Medium (2-layer)</h3>
+            <h3 class="card-title text-base">Medium</h3>
             <div id="fitness-medium-empty" class="text-base-content/50 text-sm py-4 text-center">No data yet</div>
             <table id="fitness-medium-table" class="table table-zebra table-sm hidden">
                 <thead>
@@ -71,6 +71,23 @@
                 <tbody id="fitness-medium-body"></tbody>
             </table>
             <div id="fitness-medium-summary" class="text-sm text-base-content/70 mt-2 hidden"></div>
+        </div>
+    </div>
+    <!-- Hard pool -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4">
+            <h3 class="card-title text-base">Hard</h3>
+            <div id="fitness-hard-empty" class="text-base-content/50 text-sm py-4 text-center">No data yet</div>
+            <table id="fitness-hard-table" class="table table-zebra table-sm hidden">
+                <thead>
+                    <tr>
+                        <th class="w-12">#</th>
+                        <th>Fitness Score</th>
+                    </tr>
+                </thead>
+                <tbody id="fitness-hard-body"></tbody>
+            </table>
+            <div id="fitness-hard-summary" class="text-sm text-base-content/70 mt-2 hidden"></div>
         </div>
     </div>
 </div>
@@ -128,6 +145,7 @@
                     if (d.fitnessStats) {
                         updateFitnessTable('easy', d.fitnessStats.easy);
                         updateFitnessTable('medium', d.fitnessStats.medium);
+                        updateFitnessTable('hard', d.fitnessStats.hard);
                     }
                 } catch (e) {
                     // Silently ignore fetch errors

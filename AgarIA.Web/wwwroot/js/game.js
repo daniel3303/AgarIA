@@ -183,6 +183,7 @@
         if (!data) return;
         updateFitnessTier(data.easy, "Easy");
         updateFitnessTier(data.medium, "Medium");
+        updateFitnessTier(data.hard, "Hard");
     }
 
     function updateFitnessTier(tierData, suffix) {

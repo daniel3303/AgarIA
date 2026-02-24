@@ -47,6 +47,29 @@
                 </fieldset>
             </div>
 
+            <div class="divider">Neural Network Architecture</div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Easy Hidden Layers</legend>
+                    <input type="text" name="easyHiddenLayers" class="input w-full"
+                           value="@string.Join(",", Model.EasyHiddenLayers)" placeholder="e.g. 64 or 128,64" />
+                </fieldset>
+
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Medium Hidden Layers</legend>
+                    <input type="text" name="mediumHiddenLayers" class="input w-full"
+                           value="@string.Join(",", Model.MediumHiddenLayers)" placeholder="e.g. 128 or 128,64" />
+                </fieldset>
+
+                <fieldset class="fieldset">
+                    <legend class="fieldset-legend">Hard Hidden Layers</legend>
+                    <input type="text" name="hardHiddenLayers" class="input w-full"
+                           value="@string.Join(",", Model.HardHiddenLayers)" placeholder="e.g. 256 or 256,128" />
+                </fieldset>
+            </div>
+            <p class="text-sm text-base-content/50 mt-1">Changing architecture deletes the genome file and resets training for that tier.</p>
+
             <div class="mt-6 flex gap-2">
                 <button type="submit" class="btn btn-neutral">Save Settings</button>
             </div>

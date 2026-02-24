@@ -71,15 +71,19 @@ The project includes a password-protected admin panel at `/admin/` for monitorin
 
 ### Neural Network
 
-Each AI bot is controlled by a feedforward neural network with 1 hidden layer. Bots are split 50/50 into two tiers:
+Each AI bot is controlled by a feedforward neural network with configurable hidden layers. Bots are split evenly across three tiers:
 
-- **Easy** `(E)` — 64 hidden neurons, genome size: **10,694 weights**
-- **Medium** `(M)` — 128 hidden neurons, genome size: **21,390 weights**
+- **Easy** `(E)` — default: 1×64 hidden neurons
+- **Medium** `(M)` — default: 1×128 hidden neurons
+- **Hard** `(H)` — default: 1×256 hidden neurons
 
 ```
-Easy:   161 inputs → 64 hidden (tanh) → 6 outputs
-Medium: 161 inputs → 128 hidden (tanh) → 6 outputs
+Easy:   161 inputs → [64] hidden (tanh) → 6 outputs
+Medium: 161 inputs → [128] hidden (tanh) → 6 outputs
+Hard:   161 inputs → [256] hidden (tanh) → 6 outputs
 ```
+
+The hidden layer architecture for each tier is configurable from the admin Settings page (e.g. "128,64" for two hidden layers of 128 and 64 neurons). Changing a tier's architecture deletes its genome file and resets training.
 
 #### Input Features (161)
 
@@ -130,7 +134,7 @@ fitness = (score + playerMassEaten) × (1 / sqrt(aliveTicks)) × monopolyPenalty
 
 ### Genome Persistence
 
-Evolved neural network weights auto-save to `ai_genomes_easy.json` and `ai_genomes_medium.json` every 60 seconds. Each tier has its own genome file. These files persist across server restarts, allowing evolution to continue across sessions. Delete them to start fresh.
+Evolved neural network weights auto-save to `ai_genomes_easy.json`, `ai_genomes_medium.json`, and `ai_genomes_hard.json` every 60 seconds. Each tier has its own genome file. These files persist across server restarts, allowing evolution to continue across sessions. Delete them to start fresh.
 
 ## Tech Stack
 

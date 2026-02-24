@@ -13,4 +13,10 @@ public class GameSettings
     public bool MaxSpeed { get; set; }
 
     public ResetType ResetType { get; set; }
+
+    public List<int> EasyHiddenLayers { get; set; } = [64];
+
+    public List<int> MediumHiddenLayers { get; set; } = [128];
+
+    public List<int> HardHiddenLayers { get; set; } = [256];
 }

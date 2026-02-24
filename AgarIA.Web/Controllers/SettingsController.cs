@@ -34,7 +34,11 @@ public class SettingsController : AdminBaseController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Update(int minAIPlayers, int maxAIPlayers, double resetAtScore, int autoResetSeconds, bool maxSpeed, ResetType resetType) {
+    public async Task<IActionResult> Update(
+        int minAIPlayers, int maxAIPlayers, double resetAtScore, int autoResetSeconds,
+        bool maxSpeed, ResetType resetType,
+        string easyHiddenLayers, string mediumHiddenLayers, string hardHiddenLayers) {
+
         _gameSettings.MinAIPlayers = Math.Max(0, minAIPlayers);
         _gameSettings.MaxAIPlayers = Math.Max(_gameSettings.MinAIPlayers, maxAIPlayers);
         _gameSettings.ResetAtScore = Math.Max(100, resetAtScore);
@@ -47,11 +51,53 @@ public class SettingsController : AdminBaseController
         _gameEngine.SetAutoResetSeconds(_gameSettings.AutoResetSeconds);
         _gameEngine.SetMaxSpeed(_gameSettings.MaxSpeed);
 
+        // Process architecture changes
+        ApplyArchitecture(BotDifficulty.Easy, easyHiddenLayers, _gameSettings.EasyHiddenLayers, layers => _gameSettings.EasyHiddenLayers = layers);
+        ApplyArchitecture(BotDifficulty.Medium, mediumHiddenLayers, _gameSettings.MediumHiddenLayers, layers => _gameSettings.MediumHiddenLayers = layers);
+        ApplyArchitecture(BotDifficulty.Hard, hardHiddenLayers, _gameSettings.HardHiddenLayers, layers => _gameSettings.HardHiddenLayers = layers);
+
+        // If architecture changed, request game reset
+        if (_aiController.ConsumeResetRequest())
+            _gameEngine.RequestReset();
+
         // Persist to database
         await AdminSettingsService.Save(_db, _gameSettings);
 
         TempData["Success"] = "Settings updated successfully.";
         return RedirectToAction(nameof(Index));
+    }
+
+    private void ApplyArchitecture(BotDifficulty tier, string input, List<int> current, Action<List<int>> setter)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return;
+
+        var parsed = ParseHiddenLayers(input);
+        if (parsed == null)
+        {
+            TempData["Error"] = $"Invalid {tier} hidden layers format. Use comma-separated positive integers (e.g. 128 or 128,64).";
+            return;
+        }
+
+        if (!parsed.SequenceEqual(current))
+        {
+            setter(parsed);
+            _aiController.ReconfigureTier(tier, parsed);
+        }
+    }
+
+    private static List<int> ParseHiddenLayers(string input)
+    {
+        var parts = input.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0) return null;
+
+        var result = new List<int>();
+        foreach (var part in parts)
+        {
+            if (!int.TryParse(part, out var val) || val < 1 || val > 1024)
+                return null;
+            result.Add(val);
+        }
+        return result;
     }
 
     [HttpPost]

@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AgarIA.Core.AI;
 
-public enum BotDifficulty { Easy, Medium }
+public enum BotDifficulty { Easy, Medium, Hard }
 
 [Service]
 public class AIPlayerController : IAIController
@@ -18,6 +18,7 @@ public class AIPlayerController : IAIController
     private readonly ProjectileRepository _projectileRepository;
     private readonly GeneticAlgorithm _gaEasy;
     private readonly GeneticAlgorithm _gaMedium;
+    private readonly GeneticAlgorithm _gaHard;
     private readonly GameSettings _gameSettings;
     private readonly ILogger<AIPlayerController> _logger;
     private readonly Random _random = new();
@@ -39,6 +40,7 @@ public class AIPlayerController : IAIController
     private double _aiSeqMs;
     private double _aiCleanupMs;
     private double _aiMaintainMs;
+    private bool _resetRequested;
 
     private static readonly string[] BotNames =
     {
@@ -80,8 +82,50 @@ public class AIPlayerController : IAIController
         _logger = loggerFactory.CreateLogger<AIPlayerController>();
 
         var gaLogger = loggerFactory.CreateLogger<GeneticAlgorithm>();
-        _gaEasy = new GeneticAlgorithm(gaLogger, "ai_genomes_easy.json", NeuralNetwork.GenomeSizeForHidden(64));
-        _gaMedium = new GeneticAlgorithm(gaLogger, "ai_genomes_medium.json", NeuralNetwork.GenomeSizeForHidden(128));
+        _gaEasy = new GeneticAlgorithm(gaLogger, "ai_genomes_easy.json", NeuralNetwork.GenomeSizeForLayers(gameSettings.EasyHiddenLayers.ToArray()));
+        _gaMedium = new GeneticAlgorithm(gaLogger, "ai_genomes_medium.json", NeuralNetwork.GenomeSizeForLayers(gameSettings.MediumHiddenLayers.ToArray()));
+        _gaHard = new GeneticAlgorithm(gaLogger, "ai_genomes_hard.json", NeuralNetwork.GenomeSizeForLayers(gameSettings.HardHiddenLayers.ToArray()));
+    }
+
+    private GeneticAlgorithm GetGA(BotDifficulty diff) => diff switch
+    {
+        BotDifficulty.Easy => _gaEasy,
+        BotDifficulty.Medium => _gaMedium,
+        BotDifficulty.Hard => _gaHard,
+        _ => _gaEasy
+    };
+
+    private int[] GetHiddenLayers(BotDifficulty diff) => diff switch
+    {
+        BotDifficulty.Easy => _gameSettings.EasyHiddenLayers.ToArray(),
+        BotDifficulty.Medium => _gameSettings.MediumHiddenLayers.ToArray(),
+        BotDifficulty.Hard => _gameSettings.HardHiddenLayers.ToArray(),
+        _ => _gameSettings.EasyHiddenLayers.ToArray()
+    };
+
+    private static string GetPrefix(BotDifficulty diff) => diff switch
+    {
+        BotDifficulty.Easy => "(E)",
+        BotDifficulty.Medium => "(M)",
+        BotDifficulty.Hard => "(H)",
+        _ => "(E)"
+    };
+
+    public void ReconfigureTier(BotDifficulty tier, List<int> newLayers)
+    {
+        var newSize = NeuralNetwork.GenomeSizeForLayers(newLayers.ToArray());
+        var ga = GetGA(tier);
+        ga.ResetPool(newSize);
+        _resetRequested = true;
+        _logger.LogInformation("Reconfigured {Tier} tier to hidden layers [{Layers}], genome size {Size}",
+            tier, string.Join(",", newLayers), newSize);
+    }
+
+    public bool ConsumeResetRequest()
+    {
+        if (!_resetRequested) return false;
+        _resetRequested = false;
+        return true;
     }
 
     public string GetTickBreakdown()
@@ -121,15 +165,26 @@ public class AIPlayerController : IAIController
 
         var easyCount = aiBots.Count(b => _botDifficulty.TryGetValue(b.Id, out var d) && d == BotDifficulty.Easy);
         var mediumCount = aiBots.Count(b => _botDifficulty.TryGetValue(b.Id, out var d) && d == BotDifficulty.Medium);
+        var hardCount = aiBots.Count(b => _botDifficulty.TryGetValue(b.Id, out var d) && d == BotDifficulty.Hard);
 
         for (int i = 0; i < needed; i++)
         {
-            // Spawn whichever tier is underrepresented to maintain 50/50 balance
-            var difficulty = easyCount <= mediumCount ? BotDifficulty.Easy : BotDifficulty.Medium;
-            if (difficulty == BotDifficulty.Easy) easyCount++; else mediumCount++;
-            var hiddenSize = difficulty == BotDifficulty.Easy ? 64 : 128;
-            var ga = difficulty == BotDifficulty.Easy ? _gaEasy : _gaMedium;
-            var prefix = difficulty == BotDifficulty.Easy ? "(E)" : "(M)";
+            // Spawn whichever tier has the lowest count to maintain balanced distribution
+            BotDifficulty difficulty;
+            if (easyCount <= mediumCount && easyCount <= hardCount)
+                difficulty = BotDifficulty.Easy;
+            else if (mediumCount <= hardCount)
+                difficulty = BotDifficulty.Medium;
+            else
+                difficulty = BotDifficulty.Hard;
+
+            if (difficulty == BotDifficulty.Easy) easyCount++;
+            else if (difficulty == BotDifficulty.Medium) mediumCount++;
+            else hardCount++;
+
+            var hiddenLayers = GetHiddenLayers(difficulty);
+            var ga = GetGA(difficulty);
+            var prefix = GetPrefix(difficulty);
 
             var id = $"ai_{Guid.NewGuid():N}";
             var player = new Player
@@ -145,7 +200,7 @@ public class AIPlayerController : IAIController
             };
             _playerRepository.Add(player);
 
-            var brain = new NeuralNetwork(hiddenSize);
+            var brain = new NeuralNetwork(hiddenLayers);
             brain.SetGenome(ga.GetGenome());
             _brains[id] = brain;
             _botDifficulty[id] = difficulty;
@@ -260,7 +315,7 @@ public class AIPlayerController : IAIController
             var output = new float[outputSize];
             batchOutputs.AsSpan(i * outputSize, outputSize).CopyTo(output);
 
-            // output[0..1] = moveX, moveY direction (tanh → -1..1, scale to 200px offset)
+            // output[0..1] = moveX, moveY direction (tanh -> -1..1, scale to 200px offset)
             var moveX = MathF.Tanh(output[0]) * 200f;
             var moveY = MathF.Tanh(output[1]) * 200f;
             var targetX = Math.Clamp((float)bot.X + moveX, 0f, (float)GameConfig.MapSize);
@@ -643,12 +698,14 @@ public class AIPlayerController : IAIController
     {
         _gaEasy.Save();
         _gaMedium.Save();
+        _gaHard.Save();
     }
 
     public object GetFitnessStats() => new
     {
         easy = _gaEasy.GetStats(),
-        medium = _gaMedium.GetStats()
+        medium = _gaMedium.GetStats(),
+        hard = _gaHard.GetStats()
     };
 
     // Report fitness for live bots every 30s so long-surviving genomes stay relevant in the pool
@@ -663,7 +720,7 @@ public class AIPlayerController : IAIController
         foreach (var player in liveBots)
         {
             if (!_brains.TryGetValue(player.Id, out var brain)) continue;
-            var ga = _botDifficulty.TryGetValue(player.Id, out var diff) && diff == BotDifficulty.Easy ? _gaEasy : _gaMedium;
+            var ga = _botDifficulty.TryGetValue(player.Id, out var diff) ? GetGA(diff) : _gaEasy;
             var score = (float)player.Score;
             var playerMassEaten = (float)player.MassEatenFromPlayers;
             ga.ReportFitness(brain.GetGenome(), ComputeFitness(player.Id, score, playerMassEaten));
@@ -696,7 +753,7 @@ public class AIPlayerController : IAIController
         {
             if (_brains.TryGetValue(id, out var brain))
             {
-                var ga = _botDifficulty.TryGetValue(id, out var diff) && diff == BotDifficulty.Easy ? _gaEasy : _gaMedium;
+                var ga = _botDifficulty.TryGetValue(id, out var diff) ? GetGA(diff) : _gaEasy;
                 var player = _playerRepository.Get(id);
                 var score = (float)(player?.Score ?? 0.0);
                 var playerMassEaten = (float)(player?.MassEatenFromPlayers ?? 0);

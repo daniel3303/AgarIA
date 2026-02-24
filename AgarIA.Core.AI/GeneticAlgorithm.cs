@@ -10,7 +10,7 @@ public class GeneticAlgorithm
     private readonly Random _random = new();
     private readonly ILogger<GeneticAlgorithm> _logger;
     private readonly string _savePath;
-    private readonly int _genomeSize;
+    private int _genomeSize;
     private DateTime _lastSave = DateTime.UtcNow;
     private DateTime _lastDecay = DateTime.UtcNow;
 
@@ -144,6 +144,28 @@ public class GeneticAlgorithm
         double u1 = 1.0 - _random.NextDouble();
         double u2 = 1.0 - _random.NextDouble();
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+    }
+
+    public void ResetPool(int newGenomeSize)
+    {
+        lock (_lock)
+        {
+            _pool.Clear();
+            _genomeSize = newGenomeSize;
+
+            try
+            {
+                if (File.Exists(_savePath))
+                {
+                    File.Delete(_savePath);
+                    _logger.LogWarning("Deleted genome file {Path} due to architecture change", _savePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete genome file {Path}", _savePath);
+            }
+        }
     }
 
     public void Save()

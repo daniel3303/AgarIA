@@ -1,6 +1,7 @@
 using AgarIA.Core.Data.Models;
 using AgarIA.Web.Data;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 
 namespace AgarIA.Web.Services;
 
@@ -14,6 +15,9 @@ public static class AdminSettingsService
         ["MinAIPlayers"] = (s, v) => { if (int.TryParse(v, out var i)) s.MinAIPlayers = i; },
         ["MaxAIPlayers"] = (s, v) => { if (int.TryParse(v, out var i)) s.MaxAIPlayers = i; },
         ["MaxSpeed"] = (s, v) => { if (bool.TryParse(v, out var b)) s.MaxSpeed = b; },
+        ["EasyHiddenLayers"] = (s, v) => { if (JsonConvert.DeserializeObject<List<int>>(v) is { } list) s.EasyHiddenLayers = list; },
+        ["MediumHiddenLayers"] = (s, v) => { if (JsonConvert.DeserializeObject<List<int>>(v) is { } list) s.MediumHiddenLayers = list; },
+        ["HardHiddenLayers"] = (s, v) => { if (JsonConvert.DeserializeObject<List<int>>(v) is { } list) s.HardHiddenLayers = list; },
     };
 
     public static async Task Load(AdminDbContext db, GameSettings settings)
@@ -37,6 +41,9 @@ public static class AdminSettingsService
             ["MinAIPlayers"] = settings.MinAIPlayers.ToString(),
             ["MaxAIPlayers"] = settings.MaxAIPlayers.ToString(),
             ["MaxSpeed"] = settings.MaxSpeed.ToString(),
+            ["EasyHiddenLayers"] = JsonConvert.SerializeObject(settings.EasyHiddenLayers),
+            ["MediumHiddenLayers"] = JsonConvert.SerializeObject(settings.MediumHiddenLayers),
+            ["HardHiddenLayers"] = JsonConvert.SerializeObject(settings.HardHiddenLayers),
         };
 
         foreach (var (key, value) in pairs)
