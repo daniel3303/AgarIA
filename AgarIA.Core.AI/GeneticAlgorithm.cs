@@ -175,7 +175,10 @@ public class GeneticAlgorithm
             if (loaded == null) return;
 
             foreach (var entry in loaded)
+            {
+                if (entry.Genome?.Length != _genomeSize) continue;
                 _pool.Add((entry.Genome, entry.Fitness));
+            }
 
             _logger.LogInformation("Loaded genome pool with {Count} entries from {Path}", _pool.Count, _savePath);
         }
