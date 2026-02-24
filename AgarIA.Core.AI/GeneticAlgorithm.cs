@@ -14,10 +14,10 @@ public class GeneticAlgorithm
     private DateTime _lastSave = DateTime.UtcNow;
     private DateTime _lastDecay = DateTime.UtcNow;
 
-    private const int PoolCapacity = 50;
+    private const int PoolCapacity = 200;
     private const double MutationRate = 0.10;
     private const double MutationSigma = 0.3;
-    private const int TournamentSize = 3;
+    private const int TournamentSize = 12;
     private const double CrossoverRate = 0.7;
     private const double FitnessDecayRate = 0.95;
     private const int DecayIntervalSeconds = 30;
