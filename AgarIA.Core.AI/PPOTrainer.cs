@@ -61,6 +61,10 @@ public class PPOTrainer
                 LogProb = logProb,
                 Done = false
             });
+
+            int maxBuffer = _hp.BufferSize * 4;
+            if (_buffer.Count > maxBuffer)
+                _buffer.RemoveRange(0, _buffer.Count - maxBuffer);
         }
     }
 
@@ -77,6 +81,10 @@ public class PPOTrainer
                 LogProb = logProb,
                 Done = true
             });
+
+            int maxBuffer = _hp.BufferSize * 4;
+            if (_buffer.Count > maxBuffer)
+                _buffer.RemoveRange(0, _buffer.Count - maxBuffer);
         }
     }
 
