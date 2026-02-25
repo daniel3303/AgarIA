@@ -186,9 +186,9 @@ public class GameHub : Hub<IGameHub>
         _gameEngine.SetResetAtScore(score);
     }
 
-    public void SetAutoResetSeconds(int seconds)
+    public void SetResetSecondsRange(int min, int max)
     {
-        _gameEngine.SetAutoResetSeconds(seconds);
+        _gameEngine.SetResetSecondsRange(min, max);
     }
 
     public void SetMaxSpeed(bool enabled)

@@ -48,8 +48,12 @@
                             <input type="number" asp-for="ResetAtScore" class="input w-full" min="100" step="100" />
                         </fieldset>
                         <fieldset class="fieldset reset-field" data-for="MaxTime">
-                            <legend class="fieldset-legend">Auto Reset (seconds)</legend>
-                            <input type="number" asp-for="AutoResetSeconds" class="input w-full" min="0" />
+                            <legend class="fieldset-legend">Min Reset (seconds)</legend>
+                            <input type="number" asp-for="MinResetSeconds" class="input w-full" min="0" />
+                        </fieldset>
+                        <fieldset class="fieldset reset-field" data-for="MaxTime">
+                            <legend class="fieldset-legend">Max Reset (seconds)</legend>
+                            <input type="number" asp-for="MaxResetSeconds" class="input w-full" min="0" />
                         </fieldset>
                     </div>
                 </div>

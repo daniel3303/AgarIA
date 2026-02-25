@@ -244,6 +244,21 @@ canvas {
     font-weight: 600;
 }
 
+#resetInfo {
+    position: fixed;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #1a1a2e;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    padding: 6px 18px;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
 #controls {
     position: fixed;
     top: 16px;

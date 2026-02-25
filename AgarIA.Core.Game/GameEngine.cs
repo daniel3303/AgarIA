@@ -532,6 +532,13 @@ public class GameEngine : IHostedService, IDisposable
                 humanPlayers.Count, string.Join(", ", humanPlayers.Select(p => p.Id)));
         }
 
+        // Build reset info for countdown timer
+        var resetType = _gameSettings.ResetType.ToString();
+        var resetAtScore = _gameSettings.ResetType == ResetType.MaxScore ? _gameSettings.ResetAtScore : 0;
+        var resetTicksRemaining = _gameSettings.ResetType == ResetType.MaxTime && _resetIntervalTicks > 0
+            ? Math.Max(0, _resetIntervalTicks - (_gameState.CurrentTick - _lastResetTick))
+            : 0;
+
         // Build shared update (no "you" field — humans get YouAre separately)
         object sharedUpdate;
         if (sendFullFood)
@@ -541,7 +548,10 @@ public class GameEngine : IHostedService, IDisposable
                 players,
                 food = fullFood,
                 projectiles,
-                tick = _gameState.CurrentTick
+                tick = _gameState.CurrentTick,
+                resetType,
+                resetAtScore,
+                resetTicksRemaining
             };
         }
         else
@@ -552,7 +562,10 @@ public class GameEngine : IHostedService, IDisposable
                 addedFood,
                 removedFoodIds,
                 projectiles,
-                tick = _gameState.CurrentTick
+                tick = _gameState.CurrentTick,
+                resetType,
+                resetAtScore,
+                resetTicksRemaining
             };
         }
 
@@ -587,11 +600,15 @@ public class GameEngine : IHostedService, IDisposable
 
     private void BroadcastLeaderboard(object state)
     {
-        var leaderboard = _playerRepository.GetAlive()
+        var allAlive = _playerRepository.GetAlive().ToList();
+        var leaderboard = allAlive
             .Where(p => p.OwnerId == null)
-            .OrderByDescending(p => p.Score)
+            .Select(p => new {
+                username = p.Username,
+                score = (int)(p.Mass + allAlive.Where(c => c.OwnerId == p.Id).Sum(c => c.Mass))
+            })
+            .OrderByDescending(p => p.score)
             .Take(10)
-            .Select(p => new { username = p.Username, score = p.Score })
             .ToList();
 
         _hubContext.Clients.All.Leaderboard(leaderboard);
@@ -613,12 +630,14 @@ public class GameEngine : IHostedService, IDisposable
 
     public void SetResetAtScore(double score) => _aiController.SetResetAtScore(score);
 
-    public void SetAutoResetSeconds(int seconds)
+    public void SetResetSecondsRange(int min, int max)
     {
-        _gameSettings.AutoResetSeconds = seconds;
+        _gameSettings.MinResetSeconds = min;
+        _gameSettings.MaxResetSeconds = max;
+        var seconds = _random.Next(min, max + 1);
         _resetIntervalTicks = seconds * GameConfig.TickRate;
         _lastResetTick = _gameState.CurrentTick;
-        _logger.LogInformation("Auto reset set to {Seconds}s ({Ticks} ticks)", seconds, _resetIntervalTicks);
+        _logger.LogInformation("Auto reset range set to {Min}-{Max}s, sampled {Seconds}s ({Ticks} ticks)", min, max, seconds, _resetIntervalTicks);
     }
 
     public void SetMaxSpeed(bool enabled)
@@ -707,6 +726,17 @@ public class GameEngine : IHostedService, IDisposable
         SpawnInitialFood();
         _lastResetTick = _gameState.CurrentTick;
         _roundStartTick = _gameState.CurrentTick;
+
+        // Sample a new random duration for the next round
+        var min = _gameSettings.MinResetSeconds;
+        var max = _gameSettings.MaxResetSeconds;
+        if (max >= min && min > 0)
+        {
+            var seconds = _random.Next(min, max + 1);
+            _resetIntervalTicks = seconds * GameConfig.TickRate;
+            _logger.LogInformation("Next round reset in {Seconds}s ({Ticks} ticks)", seconds, _resetIntervalTicks);
+        }
+
         _aiController.RandomizePlayerCount();
         _aiController.SaveGenomes();
         _logger.LogInformation("Game reset performed");

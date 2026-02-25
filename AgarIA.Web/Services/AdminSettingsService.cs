@@ -11,7 +11,8 @@ public static class AdminSettingsService
     {
         ["ResetType"] = (s, v) => { if (Enum.TryParse<ResetType>(v, out var r)) s.ResetType = r; },
         ["ResetAtScore"] = (s, v) => { if (double.TryParse(v, out var d)) s.ResetAtScore = d; },
-        ["AutoResetSeconds"] = (s, v) => { if (int.TryParse(v, out var i)) s.AutoResetSeconds = i; },
+        ["MinResetSeconds"] = (s, v) => { if (int.TryParse(v, out var i)) s.MinResetSeconds = i; },
+        ["MaxResetSeconds"] = (s, v) => { if (int.TryParse(v, out var i)) s.MaxResetSeconds = i; },
         ["MinAIPlayers"] = (s, v) => { if (int.TryParse(v, out var i)) s.MinAIPlayers = i; },
         ["MaxAIPlayers"] = (s, v) => { if (int.TryParse(v, out var i)) s.MaxAIPlayers = i; },
         ["MaxSpeed"] = (s, v) => { if (bool.TryParse(v, out var b)) s.MaxSpeed = b; },
@@ -37,7 +38,8 @@ public static class AdminSettingsService
         {
             ["ResetType"] = settings.ResetType.ToString(),
             ["ResetAtScore"] = settings.ResetAtScore.ToString(),
-            ["AutoResetSeconds"] = settings.AutoResetSeconds.ToString(),
+            ["MinResetSeconds"] = settings.MinResetSeconds.ToString(),
+            ["MaxResetSeconds"] = settings.MaxResetSeconds.ToString(),
             ["MinAIPlayers"] = settings.MinAIPlayers.ToString(),
             ["MaxAIPlayers"] = settings.MaxAIPlayers.ToString(),
             ["MaxSpeed"] = settings.MaxSpeed.ToString(),

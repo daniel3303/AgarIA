@@ -156,9 +156,31 @@
         // Set "you" from YouAre messages
         data.you = myConnectionId;
 
+        // Update reset countdown/info display
+        updateResetInfo(data);
+
         prevState = gameState;
         gameState = data;
         lastUpdateTime = performance.now();
+    }
+
+    // Show countdown timer or score threshold based on reset type
+    function updateResetInfo(data) {
+        const el = document.getElementById("resetInfo");
+        if (!el) return;
+
+        if (data.resetType === "MaxTime" && data.resetTicksRemaining > 0) {
+            const totalSeconds = Math.ceil(data.resetTicksRemaining / 20);
+            const mins = Math.floor(totalSeconds / 60);
+            const secs = totalSeconds % 60;
+            el.textContent = `Next reset: ${mins}:${secs.toString().padStart(2, "0")}`;
+            el.style.display = "";
+        } else if (data.resetType === "MaxScore" && data.resetAtScore > 0) {
+            el.textContent = `Resets at score ${data.resetAtScore}`;
+            el.style.display = "";
+        } else {
+            el.style.display = "none";
+        }
     }
 
     // Show death screen with killer name and final score

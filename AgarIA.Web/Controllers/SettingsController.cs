@@ -39,20 +39,21 @@ public class SettingsController : AdminBaseController
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Update(
-        int minAIPlayers, int maxAIPlayers, double resetAtScore, int autoResetSeconds,
+        int minAIPlayers, int maxAIPlayers, double resetAtScore, int minResetSeconds, int maxResetSeconds,
         bool maxSpeed, ResetType resetType,
         string easyHiddenLayers, string mediumHiddenLayers, string hardHiddenLayers) {
 
         _gameSettings.MinAIPlayers = Math.Max(0, minAIPlayers);
         _gameSettings.MaxAIPlayers = Math.Max(_gameSettings.MinAIPlayers, maxAIPlayers);
         _gameSettings.ResetAtScore = Math.Max(100, resetAtScore);
-        _gameSettings.AutoResetSeconds = Math.Max(0, autoResetSeconds);
+        _gameSettings.MinResetSeconds = Math.Max(0, minResetSeconds);
+        _gameSettings.MaxResetSeconds = Math.Max(_gameSettings.MinResetSeconds, maxResetSeconds);
         _gameSettings.MaxSpeed = maxSpeed;
         _gameSettings.ResetType = resetType;
 
         // Apply to running game
         _aiController.SetResetAtScore(_gameSettings.ResetAtScore);
-        _gameEngine.SetAutoResetSeconds(_gameSettings.AutoResetSeconds);
+        _gameEngine.SetResetSecondsRange(_gameSettings.MinResetSeconds, _gameSettings.MaxResetSeconds);
         _gameEngine.SetMaxSpeed(_gameSettings.MaxSpeed);
 
         // Process architecture changes
