@@ -270,20 +270,30 @@ public class GameEngine : IHostedService, IDisposable
             }
             else
             {
-                // Main cell killed — also kill all split cells
+                // Main cell killed — promote largest split cell if any survive
                 var splitCells = _playerRepository.GetByOwner(prey.Id).ToList();
-                foreach (var cell in splitCells)
+
+                if (splitCells.Count > 0)
                 {
-                    cell.IsAlive = false;
-                    _playerRepository.Remove(cell.Id);
+                    var promoted = splitCells.OrderByDescending(c => c.Mass).First();
+                    _playerRepository.Remove(promoted.Id);
+
+                    promoted.FoodEaten += prey.FoodEaten;
+                    promoted.PlayersKilled += prey.PlayersKilled;
+                    promoted.MassEatenFromPlayers += prey.MassEatenFromPlayers;
+                    promoted.OwnerId = null;
+                    promoted.Id = prey.Id;
+
+                    _playerRepository.Add(promoted);
                 }
-
-                _hubContext.Clients.Client(prey.Id).Died(new
+                else
                 {
-                    killedBy = eater.Username,
-                    finalScore = prey.Score
-                });
-
+                    _hubContext.Clients.Client(prey.Id).Died(new
+                    {
+                        killedBy = eater.Username,
+                        finalScore = prey.Score
+                    });
+                }
             }
         }
     }
