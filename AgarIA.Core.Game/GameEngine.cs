@@ -21,6 +21,7 @@ public class GameEngine : IHostedService, IDisposable
     private readonly ILogger<GameEngine> _logger;
     private readonly GameSettings _gameSettings;
     private readonly IGameResetHandler _resetHandler;
+    private readonly SharedGrids _grids;
     private Timer _gameTimer;
     private Timer _leaderboardTimer;
     private readonly Random _random = new();
@@ -53,6 +54,7 @@ public class GameEngine : IHostedService, IDisposable
         IHubContext<GameHub, IGameHub> hubContext,
         ILogger<GameEngine> logger,
         GameSettings gameSettings,
+        SharedGrids grids,
         IGameResetHandler resetHandler = null)
     {
         _gameState = gameState;
@@ -64,6 +66,7 @@ public class GameEngine : IHostedService, IDisposable
         _hubContext = hubContext;
         _logger = logger;
         _gameSettings = gameSettings;
+        _grids = grids;
         _resetHandler = resetHandler;
     }
 
@@ -124,6 +127,8 @@ public class GameEngine : IHostedService, IDisposable
             ts = Stopwatch.GetTimestamp();
             _collisionManager.RebuildGrids();
             _phaseTimesMs[1] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+            ResolveOverlaps();
 
             // Detect collisions in parallel (read-only grid queries)
             ts = Stopwatch.GetTimestamp();
@@ -220,6 +225,81 @@ public class GameEngine : IHostedService, IDisposable
             player.X = Math.Clamp(player.X + nx * move, 0, GameConfig.MapSize);
             player.Y = Math.Clamp(player.Y + ny * move, 0, GameConfig.MapSize);
         });
+    }
+
+    private void ResolveOverlaps()
+    {
+        var players = _grids.PlayerGrid.AllItems;
+        var buffer = new List<Player>();
+
+        for (int i = 0; i < players.Count; i++)
+        {
+            var a = players[i];
+            if (!a.IsAlive) continue;
+
+            var nearby = _grids.PlayerGrid.Query(a.X, a.Y, a.Radius * 3, buffer);
+            foreach (var b in nearby)
+            {
+                if (b == a) continue;
+                if (AreOwnedBySame(a, b)) continue;
+                // Only process each pair once (a before b by ID)
+                if (string.Compare(a.Id, b.Id, StringComparison.Ordinal) >= 0) continue;
+
+                var dx = b.X - a.X;
+                var dy = b.Y - a.Y;
+                var distSq = dx * dx + dy * dy;
+                var sumR = a.Radius + b.Radius;
+
+                if (distSq >= sumR * sumR) continue;
+
+                var dist = Math.Sqrt(distSq);
+                if (dist < 0.01) continue;
+
+                var overlap = sumR - dist;
+                var nx = dx / dist;
+                var ny = dy / dist;
+
+                var big = a.Mass > b.Mass ? a : b;
+                var small = a.Mass > b.Mass ? b : a;
+                bool canEat = big.Mass > small.Mass * GameConfig.EatSizeRatio;
+
+                if (canEat)
+                {
+                    var allowedOverlap = big.Radius * 0.3;
+                    var pushNeeded = overlap - allowedOverlap;
+                    if (pushNeeded > 0)
+                    {
+                        if (small == b)
+                        {
+                            b.X += nx * pushNeeded;
+                            b.Y += ny * pushNeeded;
+                        }
+                        else
+                        {
+                            a.X -= nx * pushNeeded;
+                            a.Y -= ny * pushNeeded;
+                        }
+                    }
+                }
+                else
+                {
+                    var totalMass = a.Mass + b.Mass;
+                    var ratioA = b.Mass / totalMass;
+                    var ratioB = a.Mass / totalMass;
+                    a.X -= nx * overlap * ratioA;
+                    a.Y -= ny * overlap * ratioA;
+                    b.X += nx * overlap * ratioB;
+                    b.Y += ny * overlap * ratioB;
+                }
+            }
+        }
+    }
+
+    private static bool AreOwnedBySame(Player a, Player b)
+    {
+        var ownerA = a.OwnerId ?? a.Id;
+        var ownerB = b.OwnerId ?? b.Id;
+        return ownerA == ownerB;
     }
 
     private void ApplyFoodCollisions(List<(Player eater, FoodItem food)> eaten)
