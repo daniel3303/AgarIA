@@ -50,18 +50,35 @@ public class HeuristicPlayerController
         foreach (var other in nearbyPlayers)
         {
             if (other.Id == player.Id || other.OwnerId == player.Id) continue;
-            if (other.Mass <= player.Mass * GameConfig.EatSizeRatio) continue; // not a threat
 
-            var dx = other.X - player.X;
-            var dy = other.Y - player.Y;
-            var dist = Math.Max(1, Math.Sqrt(dx * dx + dy * dy));
+            bool isTeammate = IsHeuristic(other);
 
-            if (dist < 400)
+            // Flee from threats (bigger players that can eat us)
+            if (!isTeammate && other.Mass > player.Mass * GameConfig.EatSizeRatio)
             {
-                hasCloseThreat = true;
-                var weight = other.Mass / dist;
-                fleeX -= dx / dist * weight;
-                fleeY -= dy / dist * weight;
+                var dx = other.X - player.X;
+                var dy = other.Y - player.Y;
+                var dist = Math.Max(1, Math.Sqrt(dx * dx + dy * dy));
+                if (dist < 400)
+                {
+                    hasCloseThreat = true;
+                    var weight = other.Mass / dist;
+                    fleeX -= dx / dist * weight;
+                    fleeY -= dy / dist * weight;
+                }
+            }
+            // Avoid heuristic teammates — gentle repulsion so they spread out
+            else if (isTeammate)
+            {
+                var dx = other.X - player.X;
+                var dy = other.Y - player.Y;
+                var dist = Math.Max(1, Math.Sqrt(dx * dx + dy * dy));
+                if (dist < 300)
+                {
+                    var weight = 50.0 / dist;
+                    fleeX -= dx / dist * weight;
+                    fleeY -= dy / dist * weight;
+                }
             }
         }
 
@@ -79,9 +96,6 @@ public class HeuristicPlayerController
         // Score food and prey, pick best target
         double bestScore = 0;
         double bestX = player.X, bestY = player.Y;
-        bool bestIsPrey = false;
-        double bestPreyMass = 0;
-        double bestPreyDist = 0;
 
         foreach (var food in nearbyFood)
         {
@@ -94,13 +108,13 @@ public class HeuristicPlayerController
                 bestScore = score;
                 bestX = food.X;
                 bestY = food.Y;
-                bestIsPrey = false;
             }
         }
 
         foreach (var other in nearbyPlayers)
         {
             if (other.Id == player.Id || other.OwnerId == player.Id) continue;
+            if (IsHeuristic(other)) continue; // don't chase teammates
             if (player.Mass <= other.Mass * GameConfig.EatSizeRatio) continue; // can't eat
 
             var dx = other.X - player.X;
@@ -112,23 +126,11 @@ public class HeuristicPlayerController
                 bestScore = score;
                 bestX = other.X;
                 bestY = other.Y;
-                bestIsPrey = true;
-                bestPreyMass = other.Mass;
-                bestPreyDist = dist;
             }
         }
 
         player.TargetX = bestX;
         player.TargetY = bestY;
-
-        // Split to catch prey
-        if (bestIsPrey
-            && player.Mass >= GameConfig.MinSplitMass
-            && bestPreyDist < 200
-            && player.Mass / 2 > bestPreyMass * GameConfig.EatSizeRatio)
-        {
-            SplitBot(player, currentTick);
-        }
     }
 
     private void SpawnIfNeeded(int idx)
@@ -151,48 +153,7 @@ public class HeuristicPlayerController
         _playerIds[idx] = id;
     }
 
-    private void SplitBot(Player bot, long currentTick)
-    {
-        var existingSplits = _playerRepository.GetByOwner(bot.Id).Count();
-        var maxNewSplits = GameConfig.MaxSplitCells - existingSplits;
-        if (maxNewSplits <= 0) return;
-        if (bot.Mass < GameConfig.MinSplitMass) return;
-
-        var dx = (float)(bot.TargetX - bot.X);
-        var dy = (float)(bot.TargetY - bot.Y);
-        var dist = MathF.Sqrt(dx * dx + dy * dy);
-
-        float nx = 0, ny = -1;
-        if (dist > 1)
-        {
-            nx = dx / dist;
-            ny = dy / dist;
-        }
-
-        var halfMass = bot.Mass / 2;
-        bot.Mass = halfMass;
-
-        var splitCell = new Player
-        {
-            Id = Guid.NewGuid().ToString(),
-            OwnerId = bot.Id,
-            Username = bot.Username,
-            ColorIndex = bot.ColorIndex,
-            IsAI = false,
-            X = Math.Clamp(bot.X + nx * GameConfig.SplitDistance, 0, GameConfig.MapSize),
-            Y = Math.Clamp(bot.Y + ny * GameConfig.SplitDistance, 0, GameConfig.MapSize),
-            Mass = halfMass,
-            TargetX = bot.TargetX,
-            TargetY = bot.TargetY,
-            IsAlive = true,
-            MergeAfterTick = currentTick + GameConfig.MergeCooldownTicks
-        };
-
-        splitCell.SpeedBoostMultiplier = GameConfig.SplitSpeed / GameConfig.BaseSpeed;
-        splitCell.SpeedBoostUntil = currentTick + GameConfig.SpeedBoostDuration;
-
-        _playerRepository.Add(splitCell);
-    }
+    private static bool IsHeuristic(Player p) => p.Id.StartsWith("heuristic_");
 
     public void OnGameReset()
     {
