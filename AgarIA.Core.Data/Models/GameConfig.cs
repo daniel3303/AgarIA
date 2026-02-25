@@ -12,7 +12,7 @@ public static class GameConfig
     public const double SpeedBoostScaleFactor = 50.0;
 
     public const double BaseSpeed = 4.0;
-    public const double MassDecayRate = 0.9998;
+    public const double MassDecayRate = 0.99998;
     public const double MinMass = 10;
     public const double FoodMass = 1;
     public const double MinSplitMass = 24;
