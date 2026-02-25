@@ -9,4 +9,6 @@ admin.db
 admin.db-shm
 admin.db-wal
 package-lock.json
+docker-compose.yml
+docker-compose.yaml
 
