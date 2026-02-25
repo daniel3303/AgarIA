@@ -284,9 +284,6 @@ public class GameEngine : IHostedService, IDisposable
                     finalScore = prey.Score
                 });
 
-                // Clean up dead human players from dictionary
-                if (!prey.IsAI)
-                    _playerRepository.Remove(prey.Id);
             }
         }
     }
