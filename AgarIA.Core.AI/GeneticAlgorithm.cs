@@ -18,10 +18,10 @@ public class GeneticAlgorithm
     private const int PoolCapacity = 64;
     private const double BaseMutationRate = 0.15;
     private const int BaseGenomeSize = 10_374;
-    private const double MinMutationRate = 0.05;
+    private const double MinMutationRate = 0.01;
     private const double MaxMutationRate = 0.20;
     private const double DefaultSigma = 0.3;
-    private const double MinSigma = 0.05;
+    private const double MinSigma = 0.01;
     private const double MaxSigma = 1.0;
     private const int EliteCount = 2;
     private const int TournamentSize = 4;
