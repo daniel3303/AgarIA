@@ -21,6 +21,11 @@ const Renderer = (() => {
     // Smooth radius interpolation per player
     const smoothRadius = new Map();
 
+    // Eat (absorb) particle effects
+    const eatEffects = [];
+    let prevPlayerMap = new Map();
+    let lastRenderTime = 0;
+
     function init() {
         canvas = document.getElementById("gameCanvas");
         ctx = canvas.getContext("2d");
@@ -150,6 +155,10 @@ const Renderer = (() => {
     // Main render call: clears, draws background/grid, food, trails, then players
     function render(gameState, camera) {
         const time = performance.now() / 1000;
+        const dt = lastRenderTime ? time - lastRenderTime : 0.016;
+        lastRenderTime = time;
+
+        detectEatEvents(gameState.players);
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#f0f2f5";
@@ -167,6 +176,7 @@ const Renderer = (() => {
         updateSmoothRadius(gameState.players);
         drawTrails();
         drawPlayers(gameState.players, gameState.you, time);
+        updateAndDrawEatEffects(dt, gameState.players);
         drawBorder();
 
         // Bot view range circles
@@ -460,6 +470,88 @@ const Renderer = (() => {
         ctx.strokeRect(vx, vy, vw, vh);
 
         ctx.restore();
+    }
+
+    // Detect eat events by comparing current players with previous frame
+    function detectEatEvents(players) {
+        if (!players) { prevPlayerMap = new Map(); return; }
+        const currentIds = new Set(players.map(p => p.id));
+        // Find players that disappeared
+        for (const [id, prev] of prevPlayerMap) {
+            if (!currentIds.has(id)) {
+                // Find nearest larger alive player (the eater)
+                let bestDist = Infinity;
+                let eater = null;
+                for (const p of players) {
+                    const dx = p.x - prev.x;
+                    const dy = p.y - prev.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (p.radius > prev.radius * 0.5 && dist < bestDist) {
+                        bestDist = dist;
+                        eater = p;
+                    }
+                }
+                if (eater && bestDist < eater.radius * 3) {
+                    spawnEatParticles(prev, eater);
+                }
+            }
+        }
+        // Update prev map
+        prevPlayerMap = new Map();
+        for (const p of players) {
+            prevPlayerMap.set(p.id, { x: p.x, y: p.y, radius: p.radius, colorIndex: p.colorIndex });
+        }
+    }
+
+    // Spawn inward-moving particles from eaten player toward eater
+    function spawnEatParticles(eaten, eater) {
+        const color = COLORS[eaten.colorIndex] || COLORS[0];
+        const count = 15;
+        for (let i = 0; i < count; i++) {
+            const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+            const spread = eaten.radius * (0.5 + Math.random() * 0.5);
+            eatEffects.push({
+                x: eaten.x + Math.cos(angle) * spread,
+                y: eaten.y + Math.sin(angle) * spread,
+                targetId: eater.id,
+                targetX: eater.x,
+                targetY: eater.y,
+                color,
+                life: 0.4,
+                maxLife: 0.4,
+                size: 2 + Math.random() * 3
+            });
+        }
+    }
+
+    // Update and draw eat absorb particles
+    function updateAndDrawEatEffects(dt, players) {
+        // Build lookup for live eater positions
+        const playerMap = new Map();
+        if (players) for (const p of players) playerMap.set(p.id, p);
+
+        for (let i = eatEffects.length - 1; i >= 0; i--) {
+            const e = eatEffects[i];
+            e.life -= dt;
+            if (e.life <= 0) { eatEffects.splice(i, 1); continue; }
+            // Update target position if eater is still alive
+            const eater = playerMap.get(e.targetId);
+            if (eater) { e.targetX = eater.x; e.targetY = eater.y; }
+            // Lerp toward target
+            const t = 1 - (e.life / e.maxLife); // 0→1
+            const ease = t * t; // accelerate inward
+            const dx = e.targetX - e.x;
+            const dy = e.targetY - e.y;
+            e.x += dx * ease * 0.15;
+            e.y += dy * ease * 0.15;
+            // Draw
+            const alpha = e.life / e.maxLife;
+            const size = e.size * alpha;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, size, 0, Math.PI * 2);
+            ctx.fillStyle = hexToRgba(e.color, alpha * 0.8);
+            ctx.fill();
+        }
     }
 
     // Convert hex color to rgba string
