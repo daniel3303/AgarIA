@@ -140,18 +140,22 @@ Every 30 seconds, all existing pool entries are multiplied by **0.95**. This pre
 
 ### Fitness Function
 
-The fitness function is designed to reward aggressive, efficient play:
+The fitness function is designed to reward aggressive, efficient play while discouraging same-tier farming:
 
 ```
-fitness = (score + playerMassEaten) × (1 / sqrt(aliveTicks)) × monopolyPenalty
+fitness = (score + crossTierMassEaten) × (1 / sqrt(aliveTicks)) × monopolyPenalty
 ```
 
 | Component | Description |
 |-----------|-------------|
 | **score** | Final mass at death (already includes mass eaten from players) |
-| **playerMassEaten** | Mass gained specifically from eating other players — counted again as a 2x bonus to reward aggression |
+| **crossTierMassEaten** | Mass gained from eating players of a **different tier or humans only** — same-tier kills are excluded to prevent clone farming (see below) |
 | **1 / sqrt(aliveTicks)** | Time efficiency factor — rewards bots that gain mass quickly rather than surviving passively |
 | **monopolyPenalty** | `1.0 - killerMassShare` — if the killer had most of the total mass, the victim's genome isn't penalized as harshly |
+
+#### Why same-tier kills are ignored
+
+Without this rule, the genetic algorithm converges to a single dominant genome that clones itself across the entire tier. All clones develop identical behavior (e.g., rushing to the same map corner), and the first clone to arrive eats all the others — earning a massive fitness bonus that reinforces the "cluster and cannibalize" strategy. By ignoring same-tier kills in fitness, bots can only improve by eating food, hunting players from other tiers, or eating human players — encouraging diverse spatial strategies instead of clone farming.
 
 ### Genome Persistence
 

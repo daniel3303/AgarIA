@@ -26,6 +26,7 @@ public class AIPlayerController : IAIController
     private readonly Dictionary<string, BotDifficulty> _botDifficulty = new();
     private readonly Dictionary<string, long> _lastShotTick = new();
     private readonly Dictionary<string, long> _spawnTick = new();
+    private readonly Dictionary<string, float> _sameTierMassEaten = new();
     private readonly PlayerVelocityTracker _velocityTracker = new();
     private long _currentTick;
     private DateTime _lastCheckpoint = DateTime.UtcNow.AddSeconds(-15); // Offset from decay by 15s to avoid race
@@ -724,7 +725,9 @@ public class AIPlayerController : IAIController
             var ga = _botDifficulty.TryGetValue(player.Id, out var diff) ? GetGA(diff) : _gaEasy;
             var score = (float)player.Score;
             var playerMassEaten = (float)player.MassEatenFromPlayers;
-            ga.ReportFitness(brain.GetGenome(), ComputeFitness(player.Id, score, playerMassEaten));
+            var sameTierEaten = _sameTierMassEaten.TryGetValue(player.Id, out var st) ? st : 0f;
+            var crossTierMassEaten = Math.Max(0, playerMassEaten - sameTierEaten);
+            ga.ReportFitness(brain.GetGenome(), ComputeFitness(player.Id, score, crossTierMassEaten));
         }
     }
 
@@ -752,19 +755,35 @@ public class AIPlayerController : IAIController
 
         foreach (var id in deadBots)
         {
+            var player = _playerRepository.Get(id);
+            var victimDiff = _botDifficulty.TryGetValue(id, out var vd) ? vd : (BotDifficulty?)null;
+
+            // Track same-tier mass eaten by the killer
+            if (player != null && !string.IsNullOrEmpty(player.KilledById) && victimDiff.HasValue)
+            {
+                var killerId = player.KilledById;
+                if (_botDifficulty.TryGetValue(killerId, out var killerDiff) && killerDiff == victimDiff.Value)
+                {
+                    _sameTierMassEaten.TryGetValue(killerId, out var prev);
+                    _sameTierMassEaten[killerId] = prev + (float)player.Mass;
+                }
+            }
+
             if (_brains.TryGetValue(id, out var brain))
             {
                 var ga = _botDifficulty.TryGetValue(id, out var diff) ? GetGA(diff) : _gaEasy;
-                var player = _playerRepository.Get(id);
                 var score = (float)(player?.Score ?? 0.0);
                 var playerMassEaten = (float)(player?.MassEatenFromPlayers ?? 0);
+                var sameTierEaten = _sameTierMassEaten.TryGetValue(id, out var st) ? st : 0f;
+                var crossTierMassEaten = Math.Max(0, playerMassEaten - sameTierEaten);
                 var killerMassShare = (float)(player?.KillerMassShare ?? 0);
-                ga.ReportFitness(brain.GetGenome(), ComputeFitness(id, score, playerMassEaten, killerMassShare));
+                ga.ReportFitness(brain.GetGenome(), ComputeFitness(id, score, crossTierMassEaten, killerMassShare));
                 _brains.Remove(id);
             }
             _botDifficulty.Remove(id);
             _spawnTick.Remove(id);
             _lastShotTick.Remove(id);
+            _sameTierMassEaten.Remove(id);
             _velocityTracker.Remove(id);
 
             // Remove split cells
