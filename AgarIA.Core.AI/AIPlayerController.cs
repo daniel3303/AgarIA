@@ -43,6 +43,14 @@ public class AIPlayerController : IAIController
     private PPOTrainer _ppoMedium;
     private PPOTrainer _ppoHard;
 
+    // Async double-buffered training: background tasks and cloned networks
+    private Task? _trainingTaskEasy;
+    private Task? _trainingTaskMedium;
+    private Task? _trainingTaskHard;
+    private ActorCriticNetwork? _trainCopyEasy;
+    private ActorCriticNetwork? _trainCopyMedium;
+    private ActorCriticNetwork? _trainCopyHard;
+
     // Per-tick reward tracking
     private readonly Dictionary<string, int> _lastFoodEaten = new();
     private readonly Dictionary<string, double> _lastMass = new();
@@ -156,9 +164,9 @@ public class AIPlayerController : IAIController
 
         switch (tier)
         {
-            case BotDifficulty.Easy: _networkEasy = network; _ppoEasy = trainer; break;
-            case BotDifficulty.Medium: _networkMedium = network; _ppoMedium = trainer; break;
-            case BotDifficulty.Hard: _networkHard = network; _ppoHard = trainer; break;
+            case BotDifficulty.Easy: _networkEasy = network; _ppoEasy = trainer; _trainingTaskEasy = null; _trainCopyEasy = null; break;
+            case BotDifficulty.Medium: _networkMedium = network; _ppoMedium = trainer; _trainingTaskMedium = null; _trainCopyMedium = null; break;
+            case BotDifficulty.Hard: _networkHard = network; _ppoHard = trainer; _trainingTaskHard = null; _trainCopyHard = null; break;
         }
 
         _resetRequested = true;
@@ -493,12 +501,46 @@ public class AIPlayerController : IAIController
 
     private void RunTrainingIfReady()
     {
-        // Train all tiers in parallel — each has its own network + trainer, no shared state
-        Parallel.Invoke(
-            () => { if (_ppoEasy.ShouldTrain()) _ppoEasy.Train(_networkEasy); },
-            () => { if (_ppoMedium.ShouldTrain()) _ppoMedium.Train(_networkMedium); },
-            () => { if (_ppoHard.ShouldTrain()) _ppoHard.Train(_networkHard); }
-        );
+        // Check if previous training completed and swap weights back
+        if (_trainingTaskEasy?.IsCompleted == true)
+        {
+            _networkEasy.SetParameters(_trainCopyEasy!.GetParameters());
+            _trainingTaskEasy = null;
+            _trainCopyEasy = null;
+        }
+
+        if (_trainingTaskMedium?.IsCompleted == true)
+        {
+            _networkMedium.SetParameters(_trainCopyMedium!.GetParameters());
+            _trainingTaskMedium = null;
+            _trainCopyMedium = null;
+        }
+
+        if (_trainingTaskHard?.IsCompleted == true)
+        {
+            _networkHard.SetParameters(_trainCopyHard!.GetParameters());
+            _trainingTaskHard = null;
+            _trainCopyHard = null;
+        }
+
+        // Launch new background training if buffer full and no training in-flight
+        if (_trainingTaskEasy == null && _ppoEasy.ShouldTrain())
+        {
+            _trainCopyEasy = _networkEasy.Clone();
+            _trainingTaskEasy = Task.Run(() => _ppoEasy.Train(_trainCopyEasy));
+        }
+
+        if (_trainingTaskMedium == null && _ppoMedium.ShouldTrain())
+        {
+            _trainCopyMedium = _networkMedium.Clone();
+            _trainingTaskMedium = Task.Run(() => _ppoMedium.Train(_trainCopyMedium));
+        }
+
+        if (_trainingTaskHard == null && _ppoHard.ShouldTrain())
+        {
+            _trainCopyHard = _networkHard.Clone();
+            _trainingTaskHard = Task.Run(() => _ppoHard.Train(_trainCopyHard));
+        }
     }
 
     private void SplitBot(Player bot, long currentTick, Dictionary<string, List<Player>> splitCellsByOwner)
@@ -708,6 +750,34 @@ public class AIPlayerController : IAIController
 
     public void SaveGenomes()
     {
+        // Wait for any in-flight training to complete before saving
+        var tasks = new[] { _trainingTaskEasy, _trainingTaskMedium, _trainingTaskHard }
+            .Where(t => t != null).ToArray();
+        if (tasks.Length > 0)
+            Task.WaitAll(tasks!);
+
+        // Swap trained weights back before saving
+        if (_trainCopyEasy != null)
+        {
+            _networkEasy.SetParameters(_trainCopyEasy.GetParameters());
+            _trainingTaskEasy = null;
+            _trainCopyEasy = null;
+        }
+
+        if (_trainCopyMedium != null)
+        {
+            _networkMedium.SetParameters(_trainCopyMedium.GetParameters());
+            _trainingTaskMedium = null;
+            _trainCopyMedium = null;
+        }
+
+        if (_trainCopyHard != null)
+        {
+            _networkHard.SetParameters(_trainCopyHard.GetParameters());
+            _trainingTaskHard = null;
+            _trainCopyHard = null;
+        }
+
         _ppoEasy.Save(_networkEasy);
         _ppoMedium.Save(_networkMedium);
         _ppoHard.Save(_networkHard);
