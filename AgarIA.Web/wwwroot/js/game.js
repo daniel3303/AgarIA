@@ -33,7 +33,7 @@
         onDied: handleDied,
         onLeaderboard: handleLeaderboard,
         onReconnected: handleReconnected,
-        onFitnessStats: handleFitnessStats,
+
         onResetScores: handleResetScores,
         onBotViewUpdate: handleBotViewUpdate,
         onGameReset: handleGameReset,
@@ -208,26 +208,6 @@
             li.innerHTML = `<span class="rank">${i + 1}.</span><span class="name">${escapeHtml(entry.username)}</span><span class="lb-score">${entry.score}</span>`;
             leaderboardList.appendChild(li);
         });
-    }
-
-    // Update fitness stats panel — show top 3 genomes by fitness for Easy and Medium tiers
-    function handleFitnessStats(data) {
-        if (!data) return;
-        updateFitnessTier(data.easy, "Easy");
-        updateFitnessTier(data.medium, "Medium");
-        updateFitnessTier(data.hard, "Hard");
-    }
-
-    function updateFitnessTier(tierData, suffix) {
-        if (!tierData) return;
-        const updatesEl = document.getElementById("ppoUpdates" + suffix);
-        if (!updatesEl) return;
-        updatesEl.textContent = tierData.totalUpdates || 0;
-        document.getElementById("ppoAvgReward" + suffix).textContent = (tierData.avgReward || 0).toFixed(3);
-        document.getElementById("ppoPolicyLoss" + suffix).textContent = (tierData.policyLoss || 0).toFixed(4);
-        document.getElementById("ppoValueLoss" + suffix).textContent = (tierData.valueLoss || 0).toFixed(4);
-        document.getElementById("ppoEntropy" + suffix).textContent = (tierData.entropy || 0).toFixed(3);
-        document.getElementById("ppoBuffer" + suffix).textContent = tierData.bufferFill || 0;
     }
 
     // Display highest score from each of the previous 10 game resets (most recent first)

@@ -523,14 +523,6 @@ public class GameEngine : IHostedService, IDisposable
 
         _hubContext.Clients.All.Leaderboard(leaderboard);
 
-        var fitnessStats = _aiController.GetFitnessStats();
-        if (fitnessStats != null)
-        {
-            foreach (var spectatorId in _gameState.Spectators.Keys)
-            {
-                _hubContext.Clients.Client(spectatorId).FitnessStats(fitnessStats);
-            }
-        }
     }
 
     public void RequestReset()

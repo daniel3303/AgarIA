@@ -137,61 +137,74 @@ public class PPOTrainer
             for (int start = 0; start + _hp.MinibatchSize <= n; start += _hp.MinibatchSize)
             {
                 var grads = new float[parameters.Length];
+                float mbPolicyLoss = 0, mbValueLoss = 0, mbEntropy = 0;
 
-                for (int mb = 0; mb < _hp.MinibatchSize; mb++)
-                {
-                    int idx = indices[start + mb];
-                    var trans = data[idx];
+                // Parallel minibatch: each thread accumulates into thread-local arrays
+                var logStd = network.LogStd;
+                int logStdOffset = parameters.Length - 2;
+                int mbSize = _hp.MinibatchSize;
+                int batchStart = start;
 
-                    var (policy, value, preActs, postActs) = network.ForwardFull(trans.State);
+                Parallel.For(0, mbSize,
+                    () => (grads: new float[parameters.Length], pLoss: 0f, vLoss: 0f, ent: 0f),
+                    (mb, _, local) =>
+                    {
+                        int idx = indices[batchStart + mb];
+                        var trans = data[idx];
 
-                    // Compute new log prob
-                    float newLogProb = ComputeLogProb(policy, network.LogStd,
-                        trans.MoveXAction, trans.MoveYAction, trans.SplitAction);
+                        var (policy, value, preActs, postActs) = network.ForwardFull(trans.State);
 
-                    float ratio = MathF.Exp(newLogProb - trans.LogProb);
-                    float adv = advantages[idx];
+                        float newLogProb = ComputeLogProb(policy, logStd,
+                            trans.MoveXAction, trans.MoveYAction, trans.SplitAction);
 
-                    // Clipped surrogate loss
-                    float surr1 = ratio * adv;
-                    float surr2 = Math.Clamp(ratio, 1f - _hp.ClipEpsilon, 1f + _hp.ClipEpsilon) * adv;
-                    float policyLoss = -MathF.Min(surr1, surr2);
+                        float ratio = MathF.Exp(newLogProb - trans.LogProb);
+                        float adv = advantages[idx];
 
-                    // Value loss
-                    float valueLoss = 0.5f * (value - returns[idx]) * (value - returns[idx]);
+                        float surr1 = ratio * adv;
+                        float surr2 = Math.Clamp(ratio, 1f - _hp.ClipEpsilon, 1f + _hp.ClipEpsilon) * adv;
+                        float policyLoss = -MathF.Min(surr1, surr2);
 
-                    // Entropy bonus
-                    float entropy = ComputeEntropy(policy, network.LogStd);
+                        float valueLoss = 0.5f * (value - returns[idx]) * (value - returns[idx]);
+                        float entropy = ComputeEntropy(policy, logStd);
 
-                    float totalLoss = policyLoss + _hp.ValueCoeff * valueLoss - _hp.EntropyCoeff * entropy;
+                        local.pLoss += policyLoss;
+                        local.vLoss += valueLoss;
+                        local.ent += entropy;
 
-                    totalPolicyLoss += policyLoss;
-                    totalValueLoss += valueLoss;
-                    totalEntropy += entropy;
+                        var dPolicy = ComputePolicyGradient(policy, logStd,
+                            trans.MoveXAction, trans.MoveYAction, trans.SplitAction,
+                            trans.LogProb, adv);
 
-                    // Compute gradients of loss w.r.t. policy outputs and value
-                    // dLoss/dPolicy = d(policyLoss)/dPolicy - entropyCoeff * d(entropy)/dPolicy
-                    var dPolicy = ComputePolicyGradient(policy, network.LogStd,
-                        trans.MoveXAction, trans.MoveYAction, trans.SplitAction,
-                        trans.LogProb, adv);
+                        float dValue = _hp.ValueCoeff * (value - returns[idx]);
 
-                    // dLoss/dValue = valueCoeff * (value - return)
-                    float dValue = _hp.ValueCoeff * (value - returns[idx]);
+                        var sampleGrads = network.Backward(trans.State, dPolicy, dValue, preActs, postActs);
 
-                    // Backprop through network
-                    var sampleGrads = network.Backward(trans.State, dPolicy, dValue, preActs, postActs);
+                        var logStdGrads = ComputeLogStdGradient(policy, logStd,
+                            trans.MoveXAction, trans.MoveYAction, trans.LogProb, adv);
+                        sampleGrads[logStdOffset] += logStdGrads[0];
+                        sampleGrads[logStdOffset + 1] += logStdGrads[1];
 
-                    // Add logStd gradients
-                    var logStdGrads = ComputeLogStdGradient(policy, network.LogStd,
-                        trans.MoveXAction, trans.MoveYAction, trans.LogProb, adv);
-                    int logStdOffset = parameters.Length - 2;
-                    sampleGrads[logStdOffset] += logStdGrads[0];
-                    sampleGrads[logStdOffset + 1] += logStdGrads[1];
+                        for (int i = 0; i < local.grads.Length; i++)
+                            local.grads[i] += sampleGrads[i];
 
-                    // Accumulate
-                    for (int i = 0; i < grads.Length; i++)
-                        grads[i] += sampleGrads[i];
-                }
+                        return local;
+                    },
+                    local =>
+                    {
+                        // Reduce thread-local results into shared accumulators
+                        lock (grads)
+                        {
+                            for (int i = 0; i < grads.Length; i++)
+                                grads[i] += local.grads[i];
+                            mbPolicyLoss += local.pLoss;
+                            mbValueLoss += local.vLoss;
+                            mbEntropy += local.ent;
+                        }
+                    });
+
+                totalPolicyLoss += mbPolicyLoss;
+                totalValueLoss += mbValueLoss;
+                totalEntropy += mbEntropy;
 
                 // Average gradients
                 float scale = 1f / _hp.MinibatchSize;

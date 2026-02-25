@@ -493,12 +493,12 @@ public class AIPlayerController : IAIController
 
     private void RunTrainingIfReady()
     {
-        if (_ppoEasy.ShouldTrain())
-            _ppoEasy.Train(_networkEasy);
-        if (_ppoMedium.ShouldTrain())
-            _ppoMedium.Train(_networkMedium);
-        if (_ppoHard.ShouldTrain())
-            _ppoHard.Train(_networkHard);
+        // Train all tiers in parallel — each has its own network + trainer, no shared state
+        Parallel.Invoke(
+            () => { if (_ppoEasy.ShouldTrain()) _ppoEasy.Train(_networkEasy); },
+            () => { if (_ppoMedium.ShouldTrain()) _ppoMedium.Train(_networkMedium); },
+            () => { if (_ppoHard.ShouldTrain()) _ppoHard.Train(_networkHard); }
+        );
     }
 
     private void SplitBot(Player bot, long currentTick, Dictionary<string, List<Player>> splitCellsByOwner)

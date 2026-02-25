@@ -102,7 +102,7 @@ public class DashboardController : AdminBaseController
             ticksPerSecond = tps,
             speedMultiplier = Math.Round(tps / 20.0, 1),
             maxSpeed = _gameSettings.MaxSpeed,
-            fitnessStats = _aiController.GetFitnessStats(),
+            ppoStats = _aiController.GetFitnessStats(),
             winRates = new {
                 easy = new { wins = winCounts["easy"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["easy"] / totalRounds, 1) : 0 },
                 medium = new { wins = winCounts["medium"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["medium"] / totalRounds, 1) : 0 },

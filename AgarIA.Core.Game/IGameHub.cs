@@ -9,7 +9,7 @@ public interface IGameHub
     Task GameUpdate(object data);
     Task Died(object data);
     Task Leaderboard(object data);
-    Task FitnessStats(object data);
+
     Task ResetScores(object data);
     Task BotViewUpdate(object data);
     Task GameReset(object data);

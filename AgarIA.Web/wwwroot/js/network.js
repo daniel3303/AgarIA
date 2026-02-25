@@ -5,7 +5,7 @@ const Network = (() => {
     let onDied = null;
     let onLeaderboard = null;
     let onReconnected = null;
-    let onFitnessStats = null;
+
     let onResetScores = null;
     let onBotViewUpdate = null;
     let onGameReset = null;
@@ -17,7 +17,7 @@ const Network = (() => {
         onDied = callbacks.onDied;
         onLeaderboard = callbacks.onLeaderboard;
         onReconnected = callbacks.onReconnected;
-        onFitnessStats = callbacks.onFitnessStats;
+
         onResetScores = callbacks.onResetScores;
         onBotViewUpdate = callbacks.onBotViewUpdate;
         onGameReset = callbacks.onGameReset;
@@ -39,11 +39,6 @@ const Network = (() => {
 
         connection.on("Leaderboard", (data) => {
             if (onLeaderboard) onLeaderboard(data);
-        });
-
-        // Receive fitness stats for spectators
-        connection.on("FitnessStats", (data) => {
-            if (onFitnessStats) onFitnessStats(data);
         });
 
         // Receive top scores from the last reset
