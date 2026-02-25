@@ -41,7 +41,9 @@ public class SettingsController : AdminBaseController
     public async Task<IActionResult> Update(
         int minAIPlayers, int maxAIPlayers, double resetAtScore, int minResetSeconds, int maxResetSeconds,
         bool maxSpeed, ResetType resetType,
-        string easyHiddenLayers, string mediumHiddenLayers, string hardHiddenLayers) {
+        string easyHiddenLayers, string mediumHiddenLayers, string hardHiddenLayers,
+        float ppoLearningRate, int ppoBufferSize, int ppoMinibatchSize, int ppoEpochs,
+        float ppoEntropyCoeff, float ppoClipEpsilon) {
 
         _gameSettings.MinAIPlayers = Math.Max(0, minAIPlayers);
         _gameSettings.MaxAIPlayers = Math.Max(_gameSettings.MinAIPlayers, maxAIPlayers);
@@ -55,6 +57,14 @@ public class SettingsController : AdminBaseController
         _aiController.SetResetAtScore(_gameSettings.ResetAtScore);
         _gameEngine.SetResetSecondsRange(_gameSettings.MinResetSeconds, _gameSettings.MaxResetSeconds);
         _gameEngine.SetMaxSpeed(_gameSettings.MaxSpeed);
+
+        // PPO hyperparameters
+        if (ppoLearningRate > 0) _gameSettings.PPO.LearningRate = ppoLearningRate;
+        if (ppoBufferSize >= 256) _gameSettings.PPO.BufferSize = ppoBufferSize;
+        if (ppoMinibatchSize >= 32) _gameSettings.PPO.MinibatchSize = Math.Min(ppoMinibatchSize, _gameSettings.PPO.BufferSize);
+        if (ppoEpochs >= 1) _gameSettings.PPO.Epochs = ppoEpochs;
+        if (ppoEntropyCoeff >= 0) _gameSettings.PPO.EntropyCoeff = ppoEntropyCoeff;
+        if (ppoClipEpsilon > 0) _gameSettings.PPO.ClipEpsilon = ppoClipEpsilon;
 
         // Process architecture changes
         ApplyArchitecture(BotDifficulty.Easy, easyHiddenLayers, _gameSettings.EasyHiddenLayers, layers => _gameSettings.EasyHiddenLayers = layers);

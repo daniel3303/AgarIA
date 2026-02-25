@@ -220,15 +220,14 @@
 
     function updateFitnessTier(tierData, suffix) {
         if (!tierData) return;
-        const topEl = document.getElementById("fitnessTop3" + suffix);
-        if (!topEl) return;
-        const topList = tierData.top10 || [];
-        topEl.innerHTML = topList.slice(0, 3).map((f, i) =>
-            `<div>#${i + 1}: ${f.toFixed(2)}</div>`
-        ).join("");
-        document.getElementById("fitnessAvg" + suffix).textContent = tierData.average.toFixed(2);
-        document.getElementById("fitnessMedian" + suffix).textContent = tierData.median.toFixed(2);
-        document.getElementById("fitnessPool" + suffix).textContent = tierData.poolSize;
+        const updatesEl = document.getElementById("ppoUpdates" + suffix);
+        if (!updatesEl) return;
+        updatesEl.textContent = tierData.totalUpdates || 0;
+        document.getElementById("ppoAvgReward" + suffix).textContent = (tierData.avgReward || 0).toFixed(3);
+        document.getElementById("ppoPolicyLoss" + suffix).textContent = (tierData.policyLoss || 0).toFixed(4);
+        document.getElementById("ppoValueLoss" + suffix).textContent = (tierData.valueLoss || 0).toFixed(4);
+        document.getElementById("ppoEntropy" + suffix).textContent = (tierData.entropy || 0).toFixed(3);
+        document.getElementById("ppoBuffer" + suffix).textContent = tierData.bufferFill || 0;
     }
 
     // Display highest score from each of the previous 10 game resets (most recent first)

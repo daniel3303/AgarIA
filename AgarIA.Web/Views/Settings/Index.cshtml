@@ -86,6 +86,48 @@
             </div>
         </div>
 
+            <!-- PPO Training Hyperparameters card -->
+            <div class="card bg-base-100 border border-base-200 mb-4">
+                <div class="card-body p-4">
+                    <h3 class="font-semibold text-sm">PPO Training</h3>
+                    <p class="text-xs text-base-content/60 mb-3">Hyperparameters for Proximal Policy Optimization. Changes apply to new training runs.</p>
+
+                    <div class="grid grid-cols-3 gap-3">
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Learning Rate</legend>
+                            <input type="number" name="ppoLearningRate" class="input w-full" step="0.0001" min="0.00001" max="0.01"
+                                   value="@Model.PPO.LearningRate" />
+                        </fieldset>
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Buffer Size</legend>
+                            <input type="number" name="ppoBufferSize" class="input w-full" min="256" step="256"
+                                   value="@Model.PPO.BufferSize" />
+                        </fieldset>
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Minibatch Size</legend>
+                            <input type="number" name="ppoMinibatchSize" class="input w-full" min="32" step="32"
+                                   value="@Model.PPO.MinibatchSize" />
+                        </fieldset>
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Epochs</legend>
+                            <input type="number" name="ppoEpochs" class="input w-full" min="1" max="20"
+                                   value="@Model.PPO.Epochs" />
+                        </fieldset>
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Entropy Coeff</legend>
+                            <input type="number" name="ppoEntropyCoeff" class="input w-full" step="0.001" min="0" max="0.1"
+                                   value="@Model.PPO.EntropyCoeff" />
+                        </fieldset>
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Clip Epsilon</legend>
+                            <input type="number" name="ppoClipEpsilon" class="input w-full" step="0.01" min="0.05" max="0.5"
+                                   value="@Model.PPO.ClipEpsilon" />
+                        </fieldset>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Right column: Speed + actions -->
         <div class="col-span-12 lg:col-span-5">
             <!-- Simulation card -->

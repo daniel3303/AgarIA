@@ -15,18 +15,13 @@ public class AIPlayerController : IAIController
 {
     private readonly PlayerRepository _playerRepository;
     private readonly FoodRepository _foodRepository;
-    private readonly GeneticAlgorithm _gaEasy;
-    private readonly GeneticAlgorithm _gaMedium;
-    private readonly GeneticAlgorithm _gaHard;
     private readonly GameSettings _gameSettings;
     private readonly ILogger<AIPlayerController> _logger;
     private readonly Random _random = new();
-    private readonly Dictionary<string, NeuralNetwork> _brains = new();
     private readonly Dictionary<string, BotDifficulty> _botDifficulty = new();
     private readonly Dictionary<string, long> _spawnTick = new();
-    private readonly Dictionary<string, float> _sameTierMassEaten = new();
     private readonly Dictionary<string, HashSet<int>> _visitedCells = new();
-    private const int GridDivisions = 4; // 4x4 = 16 cells
+    private const int GridDivisions = 4;
     private readonly PlayerVelocityTracker _velocityTracker = new();
     private long _currentTick;
     private int _currentMaxAI = new Random().Next(10, 101);
@@ -39,6 +34,21 @@ public class AIPlayerController : IAIController
     private double _aiCleanupMs;
     private double _aiMaintainMs;
     private bool _resetRequested;
+
+    // PPO per-tier shared networks and trainers
+    private ActorCriticNetwork _networkEasy;
+    private ActorCriticNetwork _networkMedium;
+    private ActorCriticNetwork _networkHard;
+    private PPOTrainer _ppoEasy;
+    private PPOTrainer _ppoMedium;
+    private PPOTrainer _ppoHard;
+
+    // Per-tick reward tracking
+    private readonly Dictionary<string, int> _lastFoodEaten = new();
+    private readonly Dictionary<string, double> _lastMass = new();
+    private readonly Dictionary<string, int> _lastPlayersKilled = new();
+    // Per-bot RNG for action sampling
+    private readonly Dictionary<string, Random> _botRng = new();
 
     private static readonly string[] BotNames =
     {
@@ -77,19 +87,38 @@ public class AIPlayerController : IAIController
         _grids = grids;
         _logger = loggerFactory.CreateLogger<AIPlayerController>();
 
-        var gaLogger = loggerFactory.CreateLogger<GeneticAlgorithm>();
+        var trainerLogger = loggerFactory.CreateLogger<PPOTrainer>();
         var dataDir = Environment.GetEnvironmentVariable("DATA_DIR") ?? Directory.GetCurrentDirectory();
-        _gaEasy = new GeneticAlgorithm(gaLogger, Path.Combine(dataDir, "ai_genomes_easy.json"), NeuralNetwork.GenomeSizeForLayers(gameSettings.EasyHiddenLayers.ToArray()));
-        _gaMedium = new GeneticAlgorithm(gaLogger, Path.Combine(dataDir, "ai_genomes_medium.json"), NeuralNetwork.GenomeSizeForLayers(gameSettings.MediumHiddenLayers.ToArray()));
-        _gaHard = new GeneticAlgorithm(gaLogger, Path.Combine(dataDir, "ai_genomes_hard.json"), NeuralNetwork.GenomeSizeForLayers(gameSettings.HardHiddenLayers.ToArray()));
+        var hp = gameSettings.PPO;
+
+        _networkEasy = new ActorCriticNetwork(gameSettings.EasyHiddenLayers.ToArray());
+        _networkMedium = new ActorCriticNetwork(gameSettings.MediumHiddenLayers.ToArray());
+        _networkHard = new ActorCriticNetwork(gameSettings.HardHiddenLayers.ToArray());
+
+        _ppoEasy = new PPOTrainer(trainerLogger, Path.Combine(dataDir, "ppo_policy_easy.json"), hp, ActorCriticNetwork.ParameterCount(gameSettings.EasyHiddenLayers.ToArray()));
+        _ppoMedium = new PPOTrainer(trainerLogger, Path.Combine(dataDir, "ppo_policy_medium.json"), hp, ActorCriticNetwork.ParameterCount(gameSettings.MediumHiddenLayers.ToArray()));
+        _ppoHard = new PPOTrainer(trainerLogger, Path.Combine(dataDir, "ppo_policy_hard.json"), hp, ActorCriticNetwork.ParameterCount(gameSettings.HardHiddenLayers.ToArray()));
+
+        // Try loading saved policies
+        _ppoEasy.Load(_networkEasy);
+        _ppoMedium.Load(_networkMedium);
+        _ppoHard.Load(_networkHard);
     }
 
-    private GeneticAlgorithm GetGA(BotDifficulty diff) => diff switch
+    private ActorCriticNetwork GetNetwork(BotDifficulty diff) => diff switch
     {
-        BotDifficulty.Easy => _gaEasy,
-        BotDifficulty.Medium => _gaMedium,
-        BotDifficulty.Hard => _gaHard,
-        _ => _gaEasy
+        BotDifficulty.Easy => _networkEasy,
+        BotDifficulty.Medium => _networkMedium,
+        BotDifficulty.Hard => _networkHard,
+        _ => _networkEasy
+    };
+
+    private PPOTrainer GetTrainer(BotDifficulty diff) => diff switch
+    {
+        BotDifficulty.Easy => _ppoEasy,
+        BotDifficulty.Medium => _ppoMedium,
+        BotDifficulty.Hard => _ppoHard,
+        _ => _ppoEasy
     };
 
     private int[] GetHiddenLayers(BotDifficulty diff) => diff switch
@@ -110,12 +139,31 @@ public class AIPlayerController : IAIController
 
     public void ReconfigureTier(BotDifficulty tier, List<int> newLayers)
     {
-        var newSize = NeuralNetwork.GenomeSizeForLayers(newLayers.ToArray());
-        var ga = GetGA(tier);
-        ga.ResetPool(newSize);
+        var layers = newLayers.ToArray();
+        var paramCount = ActorCriticNetwork.ParameterCount(layers);
+        var network = new ActorCriticNetwork(layers);
+        var hp = _gameSettings.PPO;
+        var dataDir = Environment.GetEnvironmentVariable("DATA_DIR") ?? Directory.GetCurrentDirectory();
+        var savePath = tier switch
+        {
+            BotDifficulty.Easy => Path.Combine(dataDir, "ppo_policy_easy.json"),
+            BotDifficulty.Medium => Path.Combine(dataDir, "ppo_policy_medium.json"),
+            _ => Path.Combine(dataDir, "ppo_policy_hard.json")
+        };
+
+        var trainer = new PPOTrainer(_logger, savePath, hp, paramCount);
+        trainer.Reset(paramCount);
+
+        switch (tier)
+        {
+            case BotDifficulty.Easy: _networkEasy = network; _ppoEasy = trainer; break;
+            case BotDifficulty.Medium: _networkMedium = network; _ppoMedium = trainer; break;
+            case BotDifficulty.Hard: _networkHard = network; _ppoHard = trainer; break;
+        }
+
         _resetRequested = true;
-        _logger.LogInformation("Reconfigured {Tier} tier to hidden layers [{Layers}], genome size {Size}",
-            tier, string.Join(",", newLayers), newSize);
+        _logger.LogInformation("Reconfigured {Tier} tier to hidden layers [{Layers}], param count {Count}",
+            tier, string.Join(",", newLayers), paramCount);
     }
 
     public bool ConsumeResetRequest()
@@ -136,7 +184,6 @@ public class AIPlayerController : IAIController
     {
         _currentTick = currentTick;
 
-        // Cache bots list once — GetAll() on ConcurrentDictionary is expensive
         var allBots = _playerRepository.GetAll().ToList();
 
         var ts = Stopwatch.GetTimestamp();
@@ -148,6 +195,10 @@ public class AIPlayerController : IAIController
         _aiMaintainMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
         UpdateBots(currentTick, allBots);
+
+        // Run PPO training if any buffer is full
+        RunTrainingIfReady();
+
         return allBots.Any(p => p.IsAlive && p.OwnerId == null && p.Score >= _gameSettings.ResetAtScore);
     }
 
@@ -165,7 +216,6 @@ public class AIPlayerController : IAIController
 
         for (int i = 0; i < needed; i++)
         {
-            // Spawn whichever tier has the lowest count to maintain balanced distribution
             BotDifficulty difficulty;
             if (easyCount <= mediumCount && easyCount <= hardCount)
                 difficulty = BotDifficulty.Easy;
@@ -178,10 +228,7 @@ public class AIPlayerController : IAIController
             else if (difficulty == BotDifficulty.Medium) mediumCount++;
             else hardCount++;
 
-            var hiddenLayers = GetHiddenLayers(difficulty);
-            var ga = GetGA(difficulty);
             var prefix = GetPrefix(difficulty);
-
             var id = $"ai_{Guid.NewGuid():N}";
             var player = new Player
             {
@@ -196,12 +243,13 @@ public class AIPlayerController : IAIController
             };
             _playerRepository.Add(player);
 
-            var brain = new NeuralNetwork(hiddenLayers);
-            brain.SetGenome(ga.GetGenome());
-            _brains[id] = brain;
             _botDifficulty[id] = difficulty;
             _spawnTick[id] = _currentTick;
             _visitedCells[id] = new HashSet<int>();
+            _lastFoodEaten[id] = 0;
+            _lastMass[id] = GameConfig.StartMass;
+            _lastPlayersKilled[id] = 0;
+            _botRng[id] = new Random(_random.Next());
         }
     }
 
@@ -211,15 +259,10 @@ public class AIPlayerController : IAIController
 
         var bots = allBots.Where(p => p.IsAI && p.IsAlive && p.OwnerId == null).ToList();
 
-        // Use shared grids (rebuilt by CollisionManager earlier in tick)
         var allPlayers = _grids.PlayerGrid.AllItems;
-
-        // Update velocity tracker before parallel phase
         _velocityTracker.Update(allPlayers);
 
-        // Build owner lookup once — eliminates O(N) GetByOwner scans
         var splitCellsByOwner = new Dictionary<string, List<Player>>();
-        // Also pre-compute largest split cell per owner (step 1)
         var largestSplitByOwner = new Dictionary<string, Player>();
         foreach (var p in allPlayers)
         {
@@ -234,7 +277,6 @@ public class AIPlayerController : IAIController
             }
         }
 
-        // Find largest player once for all bots
         Player globalLargest = null;
         foreach (var p in allPlayers)
         {
@@ -244,18 +286,17 @@ public class AIPlayerController : IAIController
 
         _aiSetupMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
-        // Phase 1: Combined grid query + feature build + BotPerception in single Parallel.For
+        // Phase 1: Build features (parallel)
         ts = Stopwatch.GetTimestamp();
         const int featureSize = 151;
-        const int outputSize = 3;
+        const int policySize = 3;
         var batchInputs = new float[bots.Count * featureSize];
-        var batchNetworks = new NeuralNetwork[bots.Count];
         var botHasBrain = new bool[bots.Count];
         var perceptions = new BotPerception[bots.Count];
+        var botFeatures = new float[bots.Count][];
 
         var foodGrid = _grids.FoodGrid;
         var playerGrid = _grids.PlayerGrid;
-
         BotPerceptions.Clear();
 
         Parallel.For(0, bots.Count, () => (
@@ -264,21 +305,18 @@ public class AIPlayerController : IAIController
         ), (i, _, buffers) =>
         {
             var bot = bots[i];
-
-            // Grid queries (formerly Setup phase)
             var nearbyFood = foodGrid.Query(bot.X, bot.Y, 800, buffers.foodBuf);
             var nearbyPlayers = playerGrid.Query(bot.X, bot.Y, 1600, buffers.playerBuf);
 
-            if (!_brains.TryGetValue(bot.Id, out var brain))
+            if (!_botDifficulty.ContainsKey(bot.Id))
                 return buffers;
 
-            // Build features and collect sorted IDs for BotPerception
             largestSplitByOwner.TryGetValue(bot.Id, out var secondCell);
             var features = BuildFeatureVector(
                 bot, nearbyFood, nearbyPlayers, secondCell, globalLargest,
                 out var foodIds, out var playerIds);
             features.AsSpan().CopyTo(batchInputs.AsSpan(i * featureSize, featureSize));
-            batchNetworks[i] = brain;
+            botFeatures[i] = features;
             botHasBrain[i] = true;
 
             var largestId = globalLargest != null && globalLargest.Id != bot.Id ? globalLargest.Id : null;
@@ -287,14 +325,13 @@ public class AIPlayerController : IAIController
             return buffers;
         }, _ => { });
 
-        // Populate ConcurrentDictionary from array (fast sequential scan)
         for (int i = 0; i < bots.Count; i++)
         {
             if (perceptions[i] != null)
                 BotPerceptions[bots[i].Id] = perceptions[i];
         }
 
-        // Track spatial exploration (sequential — cheap O(N) scan)
+        // Track spatial exploration
         foreach (var bot in bots)
         {
             if (_visitedCells.TryGetValue(bot.Id, out var cells))
@@ -307,44 +344,98 @@ public class AIPlayerController : IAIController
 
         _aiFeatureMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
-        // Phase 2: Batched forward pass
+        // Phase 2: Group by tier, batched forward through shared networks
         ts = Stopwatch.GetTimestamp();
-        var batchOutputs = new float[bots.Count * outputSize];
-        NeuralNetwork.BatchForward(batchInputs, batchNetworks, batchOutputs, bots.Count);
+
+        var tierGroups = new Dictionary<BotDifficulty, List<int>>();
+        for (int i = 0; i < bots.Count; i++)
+        {
+            if (!botHasBrain[i]) continue;
+            var diff = _botDifficulty[bots[i].Id];
+            if (!tierGroups.TryGetValue(diff, out var list))
+                tierGroups[diff] = list = new List<int>();
+            list.Add(i);
+        }
+
+        var policyOutputs = new float[bots.Count * policySize];
+        var valueEstimates = new float[bots.Count];
+
+        foreach (var (tier, indices) in tierGroups)
+        {
+            var network = GetNetwork(tier);
+            int count = indices.Count;
+            var tierInputs = new float[count * featureSize];
+            var tierOutputs = new float[count * policySize];
+
+            for (int j = 0; j < count; j++)
+                batchInputs.AsSpan(indices[j] * featureSize, featureSize).CopyTo(tierInputs.AsSpan(j * featureSize, featureSize));
+
+            network.BatchForwardPolicy(tierInputs, tierOutputs, count);
+
+            // Also compute value estimates (sequential, needed for PPO)
+            for (int j = 0; j < count; j++)
+            {
+                int botIdx = indices[j];
+                tierOutputs.AsSpan(j * policySize, policySize).CopyTo(policyOutputs.AsSpan(botIdx * policySize, policySize));
+
+                // Value estimate via full forward (reuses cached features)
+                var (_, value, _, _) = network.ForwardFull(botFeatures[botIdx]);
+                valueEstimates[botIdx] = value;
+            }
+        }
+
         _aiForwardMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
-        // Phase 3: Decode decisions — continuous movement regression
-        var decisions = new (Player bot, float[] output, float targetX, float targetY)[bots.Count];
+        // Phase 3: Sample actions, compute rewards, store transitions
+        ts = Stopwatch.GetTimestamp();
+        var decisions = new (Player bot, float moveX, float moveY, bool split, float targetX, float targetY)[bots.Count];
+
         for (int i = 0; i < bots.Count; i++)
         {
             if (!botHasBrain[i]) continue;
             var bot = bots[i];
-            var output = new float[outputSize];
-            batchOutputs.AsSpan(i * outputSize, outputSize).CopyTo(output);
+            var diff = _botDifficulty[bot.Id];
+            var network = GetNetwork(diff);
+            var policy = new float[policySize];
+            policyOutputs.AsSpan(i * policySize, policySize).CopyTo(policy);
 
-            // output[0..1] = moveX, moveY direction (tanh -> -1..1, scale to 200px offset)
-            var moveX = MathF.Tanh(output[0]) * 200f;
-            var moveY = MathF.Tanh(output[1]) * 200f;
-            var targetX = Math.Clamp((float)bot.X + moveX, 0f, (float)GameConfig.MapSize);
-            var targetY = Math.Clamp((float)bot.Y + moveY, 0f, (float)GameConfig.MapSize);
+            // Sample actions with exploration noise
+            var rng = _botRng.TryGetValue(bot.Id, out var r) ? r : _random;
+            var (moveX, moveY, split) = PPOTrainer.SampleActions(policy, network.LogStd, rng);
 
-            decisions[i] = (bot, output, targetX, targetY);
+            // Compute per-tick reward
+            float reward = ComputeTickReward(bot, diff);
+
+            // Compute log probability
+            float logProb = PPOTrainer.ComputeLogProb(policy, network.LogStd, moveX, moveY, split);
+
+            // Store transition
+            var trainer = GetTrainer(diff);
+            trainer.AddTransition(botFeatures[i], moveX, moveY, split, reward, valueEstimates[i], logProb);
+
+            // Update tracking for next tick
+            _lastFoodEaten[bot.Id] = bot.FoodEaten;
+            _lastMass[bot.Id] = bot.Mass;
+            _lastPlayersKilled[bot.Id] = bot.PlayersKilled;
+
+            // Decode movement: moveX/moveY are in [-1, 1] range (already tanh'd by sampling from mu=tanh(raw))
+            var targetX = Math.Clamp((float)bot.X + moveX * 200f, 0f, (float)GameConfig.MapSize);
+            var targetY = Math.Clamp((float)bot.Y + moveY * 200f, 0f, (float)GameConfig.MapSize);
+
+            decisions[i] = (bot, moveX, moveY, split, targetX, targetY);
         }
 
-        ts = Stopwatch.GetTimestamp();
-
-        // Per-bot command slots (lock-free)
+        // Apply decisions
         var wantsSplit = new bool[bots.Count];
 
         Parallel.For(0, decisions.Length, i =>
         {
-            var (bot, output, targetX, targetY) = decisions[i];
-            if (output == null) return;
+            var (bot, _, _, split, targetX, targetY) = decisions[i];
+            if (bot == null) return;
 
             bot.TargetX = targetX;
             bot.TargetY = targetY;
 
-            // Propagate target to split cells
             if (splitCellsByOwner.TryGetValue(bot.Id, out var cells))
             {
                 foreach (var cell in cells)
@@ -354,12 +445,10 @@ public class AIPlayerController : IAIController
                 }
             }
 
-            // Flag split
-            if (output[2] > 0.5f && bot.Mass >= GameConfig.MinSplitMass)
+            if (split && bot.Mass >= GameConfig.MinSplitMass)
                 wantsSplit[i] = true;
         });
 
-        // Serial phase: apply split commands (shared state mutations)
         for (int i = 0; i < bots.Count; i++)
         {
             if (wantsSplit[i])
@@ -367,6 +456,49 @@ public class AIPlayerController : IAIController
         }
 
         _aiSeqMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+    }
+
+    private float ComputeTickReward(Player bot, BotDifficulty diff)
+    {
+        float reward = 0;
+
+        // Food eaten this tick
+        int prevFood = _lastFoodEaten.TryGetValue(bot.Id, out var pf) ? pf : 0;
+        int foodDelta = bot.FoodEaten - prevFood;
+        reward += foodDelta * 1.0f;
+
+        // Mass from eating players (Easy: 0)
+        if (diff != BotDifficulty.Easy)
+        {
+            int prevKills = _lastPlayersKilled.TryGetValue(bot.Id, out var pk) ? pk : 0;
+            int killDelta = bot.PlayersKilled - prevKills;
+            reward += killDelta * 2.0f;
+        }
+
+        // Survival bonus
+        reward += 0.01f;
+
+        // Exploration: new grid cell visited this tick
+        if (_visitedCells.TryGetValue(bot.Id, out var cells))
+        {
+            int cx = Math.Clamp((int)(bot.X / (GameConfig.MapSize / GridDivisions)), 0, GridDivisions - 1);
+            int cy = Math.Clamp((int)(bot.Y / (GameConfig.MapSize / GridDivisions)), 0, GridDivisions - 1);
+            int cellId = cy * GridDivisions + cx;
+            if (!cells.Contains(cellId))
+                reward += 0.05f;
+        }
+
+        return reward;
+    }
+
+    private void RunTrainingIfReady()
+    {
+        if (_ppoEasy.ShouldTrain())
+            _ppoEasy.Train(_networkEasy);
+        if (_ppoMedium.ShouldTrain())
+            _ppoMedium.Train(_networkMedium);
+        if (_ppoHard.ShouldTrain())
+            _ppoHard.Train(_networkHard);
     }
 
     private void SplitBot(Player bot, long currentTick, Dictionary<string, List<Player>> splitCellsByOwner)
@@ -432,20 +564,13 @@ public class AIPlayerController : IAIController
         var largestMass = (float)(globalLargest?.Mass ?? bot.Mass);
         var mapSize = (float)GameConfig.MapSize;
 
-        // Velocity normalization factor: bot's current speed
         var botSpeed = (float)(GameConfig.BaseSpeed * bot.SpeedBoostMultiplier);
         if (botSpeed < 0.01f) botSpeed = (float)GameConfig.BaseSpeed;
 
-        // Own mass relative to largest (1)
         features[idx++] = largestMass > 0 ? (float)bot.Mass / largestMass : 1.0f;
-
-        // Absolute mass indicator (1) — 1.0 when tiny, ~0 when huge
         features[idx++] = 1.0f / (float)bot.Mass;
-
-        // Can split (1)
         features[idx++] = bot.Mass >= GameConfig.MinSplitMass ? 1.0f : 0.0f;
 
-        // Absolute position of two largest own cells normalized 0-1 (4)
         features[idx++] = botX / mapSize;
         features[idx++] = botY / mapSize;
         if (secondCell != null)
@@ -459,7 +584,6 @@ public class AIPlayerController : IAIController
             features[idx++] = 0;
         }
 
-        // 32 nearest food (64) — partial selection instead of full sort
         const int topFoodK = 32;
         var topFood = new (float dx, float dy, float distSq, int id)[topFoodK];
         int topFoodCount = 0;
@@ -501,7 +625,6 @@ public class AIPlayerController : IAIController
             }
         }
 
-        // 16 nearest players (80) — dx, dy, mass, vx, vy
         const int topPlayerK = 16;
         var topPlayers = new (float dx, float dy, float distSq, float mass, string id)[topPlayerK];
         int topPlayerCount = 0;
@@ -557,9 +680,7 @@ public class AIPlayerController : IAIController
         for (int i = len - 1; i > 0; i--)
         {
             if (arr[i].distSq < arr[i - 1].distSq)
-            {
                 (arr[i], arr[i - 1]) = (arr[i - 1], arr[i]);
-            }
             else break;
         }
     }
@@ -569,31 +690,9 @@ public class AIPlayerController : IAIController
         for (int i = len - 1; i > 0; i--)
         {
             if (arr[i].distSq < arr[i - 1].distSq)
-            {
                 (arr[i], arr[i - 1]) = (arr[i - 1], arr[i]);
-            }
             else break;
         }
-    }
-
-    private float ComputeFitness(string botId, float score, float crossTierMassEaten, float killerMassShare = 0)
-    {
-        var monopolyPenalty = 1.0f - killerMassShare;
-
-        // Reward aggression: cross-tier player mass eaten counts double
-        var adjustedScore = score + crossTierMassEaten;
-
-        // Time efficiency: divide by sqrt(alive ticks) to reward faster mass gain
-        var aliveTicks = _spawnTick.TryGetValue(botId, out var spawn)
-            ? Math.Max(_currentTick - spawn, 1)
-            : 1;
-        var timeEfficiency = 1.0f / MathF.Sqrt(aliveTicks);
-
-        var totalCells = GridDivisions * GridDivisions;
-        var visited = _visitedCells.TryGetValue(botId, out var cells) ? cells.Count : 1;
-        var explorationRate = (float)visited / totalCells;
-
-        return adjustedScore * timeEfficiency * monopolyPenalty * explorationRate;
     }
 
     public void RandomizePlayerCount()
@@ -604,23 +703,21 @@ public class AIPlayerController : IAIController
 
     public void OnGameReset()
     {
-        _gaEasy.DecayPool();
-        _gaMedium.DecayPool();
-        _gaHard.DecayPool();
+        // PPO doesn't need pool decay — training continues across resets
     }
 
     public void SaveGenomes()
     {
-        _gaEasy.Save();
-        _gaMedium.Save();
-        _gaHard.Save();
+        _ppoEasy.Save(_networkEasy);
+        _ppoMedium.Save(_networkMedium);
+        _ppoHard.Save(_networkHard);
     }
 
     public object GetFitnessStats() => new
     {
-        easy = _gaEasy.GetStats(),
-        medium = _gaMedium.GetStats(),
-        hard = _gaHard.GetStats()
+        easy = _ppoEasy.GetStats(),
+        medium = _ppoMedium.GetStats(),
+        hard = _ppoHard.GetStats()
     };
 
     private void CleanupDeadBots(List<Player> allBots)
@@ -632,7 +729,6 @@ public class AIPlayerController : IAIController
 
         if (deadBots.Count == 0) return;
 
-        // Build owner lookup once for all dead bot cleanup
         var deadBotIds = new HashSet<string>(deadBots);
         var splitCellsByOwner = new Dictionary<string, List<Player>>();
         foreach (var p in allBots)
@@ -648,41 +744,25 @@ public class AIPlayerController : IAIController
         foreach (var id in deadBots)
         {
             var player = _playerRepository.Get(id);
-            var victimDiff = _botDifficulty.TryGetValue(id, out var vd) ? vd : (BotDifficulty?)null;
 
-            // Track same-tier mass eaten by the killer
-            if (player != null && !string.IsNullOrEmpty(player.KilledById) && victimDiff.HasValue)
+            // Store terminal transition with death penalty
+            if (_botDifficulty.TryGetValue(id, out var diff))
             {
-                var killerId = player.KilledById;
-                if (_botDifficulty.TryGetValue(killerId, out var killerDiff) && killerDiff == victimDiff.Value)
-                {
-                    _sameTierMassEaten.TryGetValue(killerId, out var prev);
-                    _sameTierMassEaten[killerId] = prev + (float)player.Mass;
-                }
+                var trainer = GetTrainer(diff);
+                // Use a zero-state for terminal (the actual state doesn't matter much)
+                var terminalState = new float[151];
+                trainer.AddTerminal(terminalState, -5.0f, 0f, 0f);
             }
 
-            if (_brains.TryGetValue(id, out var brain))
-            {
-                var diff = _botDifficulty.TryGetValue(id, out var d) ? d : BotDifficulty.Easy;
-                var ga = GetGA(diff);
-                var score = (float)(player?.Score ?? 0.0);
-                var playerMassEaten = (float)(player?.MassEatenFromPlayers ?? 0);
-                var sameTierEaten = _sameTierMassEaten.TryGetValue(id, out var st) ? st : 0f;
-                var crossTierMassEaten = Math.Max(0, playerMassEaten - sameTierEaten);
-                var killerMassShare = (float)(player?.KillerMassShare ?? 0);
-
-                // Easy bots: fitness ignores player-eating mass (food-only)
-                var effectiveCrossTier = diff == BotDifficulty.Easy ? 0f : crossTierMassEaten;
-                ga.ReportFitness(brain.GetGenome(), ComputeFitness(id, score, effectiveCrossTier, killerMassShare));
-                _brains.Remove(id);
-            }
             _botDifficulty.Remove(id);
             _spawnTick.Remove(id);
-            _sameTierMassEaten.Remove(id);
             _visitedCells.Remove(id);
+            _lastFoodEaten.Remove(id);
+            _lastMass.Remove(id);
+            _lastPlayersKilled.Remove(id);
+            _botRng.Remove(id);
             _velocityTracker.Remove(id);
 
-            // Remove split cells
             if (splitCellsByOwner.TryGetValue(id, out var cells))
             {
                 foreach (var cell in cells)

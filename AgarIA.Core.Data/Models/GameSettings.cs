@@ -21,4 +21,20 @@ public class GameSettings
     public List<int> MediumHiddenLayers { get; set; } = [128];
 
     public List<int> HardHiddenLayers { get; set; } = [128, 128];
+
+    public PPOSettings PPO { get; set; } = new();
+}
+
+public class PPOSettings
+{
+    public int BufferSize { get; set; } = 2048;
+    public int MinibatchSize { get; set; } = 256;
+    public int Epochs { get; set; } = 4;
+    public float Gamma { get; set; } = 0.99f;
+    public float Lambda { get; set; } = 0.95f;
+    public float ClipEpsilon { get; set; } = 0.2f;
+    public float LearningRate { get; set; } = 3e-4f;
+    public float EntropyCoeff { get; set; } = 0.01f;
+    public float ValueCoeff { get; set; } = 0.5f;
+    public float MaxGradNorm { get; set; } = 0.5f;
 }
