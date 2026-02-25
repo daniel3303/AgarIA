@@ -42,6 +42,7 @@ public class SettingsController : AdminBaseController
         int minAIPlayers, int maxAIPlayers, double resetAtScore, int minResetSeconds, int maxResetSeconds,
         bool maxSpeed, ResetType resetType,
         string easyHiddenLayers, string mediumHiddenLayers, string hardHiddenLayers,
+        bool easyEnabled, bool mediumEnabled, bool hardEnabled,
         string ppoLearningRate, int ppoBufferSize, int ppoMinibatchSize, int ppoEpochs,
         float ppoEntropyCoeff, float ppoClipEpsilon) {
 
@@ -52,6 +53,12 @@ public class SettingsController : AdminBaseController
         _gameSettings.MaxResetSeconds = Math.Max(_gameSettings.MinResetSeconds, maxResetSeconds);
         _gameSettings.MaxSpeed = maxSpeed;
         _gameSettings.ResetType = resetType;
+
+        // Apply tier enable/disable
+        _gameSettings.EasyEnabled = easyEnabled;
+        _gameSettings.MediumEnabled = mediumEnabled;
+        _gameSettings.HardEnabled = hardEnabled;
+        _aiController.ApplyTierEnabled();
 
         // Apply to running game
         _aiController.SetResetAtScore(_gameSettings.ResetAtScore);

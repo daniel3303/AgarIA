@@ -145,6 +145,30 @@ public class AIPlayerController : IAIController
         _ => "(E)"
     };
 
+    public bool IsTierEnabled(BotDifficulty tier) => tier switch
+    {
+        BotDifficulty.Easy => _gameSettings.EasyEnabled,
+        BotDifficulty.Medium => _gameSettings.MediumEnabled,
+        BotDifficulty.Hard => _gameSettings.HardEnabled,
+        _ => true
+    };
+
+    public void ApplyTierEnabled()
+    {
+        // Kill existing bots of disabled tiers
+        foreach (var tier in new[] { BotDifficulty.Easy, BotDifficulty.Medium, BotDifficulty.Hard })
+        {
+            if (IsTierEnabled(tier)) continue;
+
+            var toKill = _botDifficulty.Where(kv => kv.Value == tier).Select(kv => kv.Key).ToList();
+            foreach (var id in toKill)
+            {
+                var player = _playerRepository.Get(id);
+                if (player != null) player.IsAlive = false;
+            }
+        }
+    }
+
     public void ReconfigureTier(BotDifficulty tier, List<int> newLayers)
     {
         var layers = newLayers.ToArray();
@@ -218,12 +242,19 @@ public class AIPlayerController : IAIController
         var aiBots = allBots.Where(p => p.IsAI && p.IsAlive && p.OwnerId == null).ToList();
         var needed = _currentMaxAI - aiBots.Count;
 
-        var easyCount = aiBots.Count(b => _botDifficulty.TryGetValue(b.Id, out var d) && d == BotDifficulty.Easy);
-        var mediumCount = aiBots.Count(b => _botDifficulty.TryGetValue(b.Id, out var d) && d == BotDifficulty.Medium);
-        var hardCount = aiBots.Count(b => _botDifficulty.TryGetValue(b.Id, out var d) && d == BotDifficulty.Hard);
+        var easyEnabled = _gameSettings.EasyEnabled;
+        var mediumEnabled = _gameSettings.MediumEnabled;
+        var hardEnabled = _gameSettings.HardEnabled;
+
+        var easyCount = easyEnabled ? aiBots.Count(b => _botDifficulty.TryGetValue(b.Id, out var d) && d == BotDifficulty.Easy) : int.MaxValue;
+        var mediumCount = mediumEnabled ? aiBots.Count(b => _botDifficulty.TryGetValue(b.Id, out var d) && d == BotDifficulty.Medium) : int.MaxValue;
+        var hardCount = hardEnabled ? aiBots.Count(b => _botDifficulty.TryGetValue(b.Id, out var d) && d == BotDifficulty.Hard) : int.MaxValue;
 
         for (int i = 0; i < needed; i++)
         {
+            // Skip if all tiers disabled
+            if (!easyEnabled && !mediumEnabled && !hardEnabled) break;
+
             BotDifficulty difficulty;
             if (easyCount <= mediumCount && easyCount <= hardCount)
                 difficulty = BotDifficulty.Easy;
@@ -523,20 +554,20 @@ public class AIPlayerController : IAIController
             _trainCopyHard = null;
         }
 
-        // Launch new background training if buffer full and no training in-flight
-        if (_trainingTaskEasy == null && _ppoEasy.ShouldTrain())
+        // Launch new background training if buffer full, no training in-flight, and tier enabled
+        if (_gameSettings.EasyEnabled && _trainingTaskEasy == null && _ppoEasy.ShouldTrain())
         {
             _trainCopyEasy = _networkEasy.Clone();
             _trainingTaskEasy = Task.Run(() => _ppoEasy.Train(_trainCopyEasy));
         }
 
-        if (_trainingTaskMedium == null && _ppoMedium.ShouldTrain())
+        if (_gameSettings.MediumEnabled && _trainingTaskMedium == null && _ppoMedium.ShouldTrain())
         {
             _trainCopyMedium = _networkMedium.Clone();
             _trainingTaskMedium = Task.Run(() => _ppoMedium.Train(_trainCopyMedium));
         }
 
-        if (_trainingTaskHard == null && _ppoHard.ShouldTrain())
+        if (_gameSettings.HardEnabled && _trainingTaskHard == null && _ppoHard.ShouldTrain())
         {
             _trainCopyHard = _networkHard.Clone();
             _trainingTaskHard = Task.Run(() => _ppoHard.Train(_trainCopyHard));

@@ -30,7 +30,7 @@
 
                     <fieldset class="fieldset mb-2">
                         <legend class="fieldset-legend">Reset Type</legend>
-                        <div class="flex gap-4">
+                        <div class="flex flex-wrap gap-4">
                             @foreach (var rt in Enum.GetValues<ResetType>())
                             {
                                 <label class="label cursor-pointer gap-2">
@@ -65,19 +65,34 @@
                     <h3 class="font-semibold text-sm">Neural Network Architecture</h3>
                     <p class="text-xs text-base-content/60 mb-2">Hidden layer sizes per tier. Use comma-separated values for multiple layers (e.g. 128,64). Changing architecture deletes the genome file and resets training.</p>
 
-                    <div class="grid grid-cols-3 gap-2">
-                        <fieldset class="fieldset">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <fieldset class="fieldset" style="@(Model.EasyEnabled ? "" : "opacity:0.5")">
                             <legend class="fieldset-legend">Easy</legend>
+                            <label class="label cursor-pointer justify-start gap-2 mb-1">
+                                <input type="hidden" name="easyEnabled" value="false" />
+                                <input type="checkbox" name="easyEnabled" value="true" class="checkbox checkbox-xs" checked="@Model.EasyEnabled" data-tier-toggle="easy" />
+                                <span class="label-text text-xs">Enabled</span>
+                            </label>
                             <input type="text" name="easyHiddenLayers" class="input input-sm w-full"
                                    value="@string.Join(",", Model.EasyHiddenLayers)" placeholder="64" />
                         </fieldset>
-                        <fieldset class="fieldset">
+                        <fieldset class="fieldset" style="@(Model.MediumEnabled ? "" : "opacity:0.5")">
                             <legend class="fieldset-legend">Medium</legend>
+                            <label class="label cursor-pointer justify-start gap-2 mb-1">
+                                <input type="hidden" name="mediumEnabled" value="false" />
+                                <input type="checkbox" name="mediumEnabled" value="true" class="checkbox checkbox-xs" checked="@Model.MediumEnabled" data-tier-toggle="medium" />
+                                <span class="label-text text-xs">Enabled</span>
+                            </label>
                             <input type="text" name="mediumHiddenLayers" class="input input-sm w-full"
                                    value="@string.Join(",", Model.MediumHiddenLayers)" placeholder="128" />
                         </fieldset>
-                        <fieldset class="fieldset">
+                        <fieldset class="fieldset" style="@(Model.HardEnabled ? "" : "opacity:0.5")">
                             <legend class="fieldset-legend">Hard</legend>
+                            <label class="label cursor-pointer justify-start gap-2 mb-1">
+                                <input type="hidden" name="hardEnabled" value="false" />
+                                <input type="checkbox" name="hardEnabled" value="true" class="checkbox checkbox-xs" checked="@Model.HardEnabled" data-tier-toggle="hard" />
+                                <span class="label-text text-xs">Enabled</span>
+                            </label>
                             <input type="text" name="hardHiddenLayers" class="input input-sm w-full"
                                    value="@string.Join(",", Model.HardHiddenLayers)" placeholder="256" />
                         </fieldset>
@@ -91,7 +106,7 @@
                     <h3 class="font-semibold text-sm">PPO Training</h3>
                     <p class="text-xs text-base-content/60 mb-2">Hyperparameters for Proximal Policy Optimization. Changes apply to new training runs.</p>
 
-                    <div class="grid grid-cols-3 gap-2">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         <fieldset class="fieldset">
                             <legend class="fieldset-legend">Learning Rate</legend>
                             <input type="text" name="ppoLearningRate" class="input input-sm w-full"
@@ -175,6 +190,13 @@
     document.querySelectorAll('input[name="ResetType"]').forEach(r =>
         r.addEventListener('change', updateResetFields));
     updateResetFields();
+
+    // Toggle fieldset opacity when tier checkbox changes
+    document.querySelectorAll('[data-tier-toggle]').forEach(cb => {
+        cb.addEventListener('change', () => {
+            cb.closest('fieldset').style.opacity = cb.checked ? '' : '0.5';
+        });
+    });
 
     // Confirm before resetting game
     document.getElementById('resetGameBtn').addEventListener('click', () => {

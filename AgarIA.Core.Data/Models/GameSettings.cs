@@ -16,6 +16,12 @@ public class GameSettings
 
     public ResetType ResetType { get; set; }
 
+    public bool EasyEnabled { get; set; } = true;
+
+    public bool MediumEnabled { get; set; } = true;
+
+    public bool HardEnabled { get; set; } = true;
+
     public List<int> EasyHiddenLayers { get; set; } = [64];
 
     public List<int> MediumHiddenLayers { get; set; } = [128];
