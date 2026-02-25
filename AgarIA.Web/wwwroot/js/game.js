@@ -98,6 +98,7 @@
         Network.respawn().then(() => {
             deathOverlay.style.display = "none";
             hud.style.display = "block";
+            prevState = null;
         });
     });
 
@@ -197,7 +198,8 @@
         document.getElementById("finalScoreText").textContent = "";
         deathOverlay.style.display = "flex";
         hud.style.display = "none";
-        gameState = null;
+        gameState = { players: [], food: [], you: null, tick: 0 };
+        prevState = null;
     }
 
     // Update leaderboard list in HUD
