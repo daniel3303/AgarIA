@@ -506,16 +506,17 @@ public class AIPlayerController : IAIController
         int foodDelta = bot.FoodEaten - prevFood;
         reward += foodDelta * 1.0f;
 
-        // Mass from eating players (Easy: 0)
+        // Mass from eating players — reward scales with mass gained (Easy: 0)
         if (diff != BotDifficulty.Easy)
         {
             int prevKills = _lastPlayersKilled.TryGetValue(bot.Id, out var pk) ? pk : 0;
             int killDelta = bot.PlayersKilled - prevKills;
-            reward += killDelta * 2.0f;
+            if (killDelta > 0)
+            {
+                double lastMass = _lastMass.TryGetValue(bot.Id, out var lm) ? lm : GameConfig.StartMass;
+                reward += (float)(bot.Mass - lastMass);
+            }
         }
-
-        // Survival bonus
-        reward += 0.01f;
 
         // Exploration: new grid cell visited this tick
         if (_visitedCells.TryGetValue(bot.Id, out var cells))
@@ -865,7 +866,8 @@ public class AIPlayerController : IAIController
                 var trainer = GetTrainer(diff);
                 // Use a zero-state for terminal (the actual state doesn't matter much)
                 var terminalState = new float[170];
-                trainer.AddTerminal(terminalState, -5.0f, 0f, 0f);
+                float deathPenalty = player != null ? -(float)player.Mass : -5.0f;
+                trainer.AddTerminal(terminalState, deathPenalty, 0f, 0f);
             }
 
             _botDifficulty.Remove(id);
