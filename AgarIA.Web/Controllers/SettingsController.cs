@@ -42,7 +42,7 @@ public class SettingsController : AdminBaseController
         int minAIPlayers, int maxAIPlayers, double resetAtScore, int minResetSeconds, int maxResetSeconds,
         bool maxSpeed, ResetType resetType,
         string easyHiddenLayers, string mediumHiddenLayers, string hardHiddenLayers,
-        float ppoLearningRate, int ppoBufferSize, int ppoMinibatchSize, int ppoEpochs,
+        string ppoLearningRate, int ppoBufferSize, int ppoMinibatchSize, int ppoEpochs,
         float ppoEntropyCoeff, float ppoClipEpsilon) {
 
         _gameSettings.MinAIPlayers = Math.Max(0, minAIPlayers);
@@ -59,7 +59,9 @@ public class SettingsController : AdminBaseController
         _gameEngine.SetMaxSpeed(_gameSettings.MaxSpeed);
 
         // PPO hyperparameters
-        if (ppoLearningRate > 0) _gameSettings.PPO.LearningRate = ppoLearningRate;
+        if (!string.IsNullOrWhiteSpace(ppoLearningRate) &&
+            float.TryParse(ppoLearningRate, System.Globalization.CultureInfo.InvariantCulture, out var lr) && lr > 0)
+            _gameSettings.PPO.LearningRate = lr;
         if (ppoBufferSize >= 256) _gameSettings.PPO.BufferSize = ppoBufferSize;
         if (ppoMinibatchSize >= 32) _gameSettings.PPO.MinibatchSize = Math.Min(ppoMinibatchSize, _gameSettings.PPO.BufferSize);
         if (ppoEpochs >= 1) _gameSettings.PPO.Epochs = ppoEpochs;

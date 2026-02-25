@@ -92,12 +92,22 @@
                     <h3 class="font-semibold text-sm">PPO Training</h3>
                     <p class="text-xs text-base-content/60 mb-3">Hyperparameters for Proximal Policy Optimization. Changes apply to new training runs.</p>
 
-                    <div class="grid grid-cols-3 gap-3">
+                    <h4 class="text-xs font-medium text-base-content/70 mt-2 mb-1">Optimization</h4>
+                    <div class="grid grid-cols-2 gap-3">
                         <fieldset class="fieldset">
                             <legend class="fieldset-legend">Learning Rate</legend>
-                            <input type="number" name="ppoLearningRate" class="input w-full" step="0.0001" min="0.00001" max="0.01"
-                                   value="@Model.PPO.LearningRate" />
+                            <input type="text" name="ppoLearningRate" class="input w-full"
+                                   value="@Model.PPO.LearningRate.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" placeholder="0.0003" />
                         </fieldset>
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Clip Epsilon</legend>
+                            <input type="number" name="ppoClipEpsilon" class="input w-full" step="0.01" min="0.05" max="0.5"
+                                   value="@Model.PPO.ClipEpsilon.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+                        </fieldset>
+                    </div>
+
+                    <h4 class="text-xs font-medium text-base-content/70 mt-3 mb-1">Data Collection</h4>
+                    <div class="grid grid-cols-3 gap-3">
                         <fieldset class="fieldset">
                             <legend class="fieldset-legend">Buffer Size</legend>
                             <input type="number" name="ppoBufferSize" class="input w-full" min="256" step="256"
@@ -113,15 +123,14 @@
                             <input type="number" name="ppoEpochs" class="input w-full" min="1" max="20"
                                    value="@Model.PPO.Epochs" />
                         </fieldset>
+                    </div>
+
+                    <h4 class="text-xs font-medium text-base-content/70 mt-3 mb-1">Loss Weights</h4>
+                    <div class="grid grid-cols-2 gap-3">
                         <fieldset class="fieldset">
                             <legend class="fieldset-legend">Entropy Coeff</legend>
                             <input type="number" name="ppoEntropyCoeff" class="input w-full" step="0.001" min="0" max="0.1"
-                                   value="@Model.PPO.EntropyCoeff" />
-                        </fieldset>
-                        <fieldset class="fieldset">
-                            <legend class="fieldset-legend">Clip Epsilon</legend>
-                            <input type="number" name="ppoClipEpsilon" class="input w-full" step="0.01" min="0.05" max="0.5"
-                                   value="@Model.PPO.ClipEpsilon" />
+                                   value="@Model.PPO.EntropyCoeff.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
                         </fieldset>
                     </div>
                 </div>

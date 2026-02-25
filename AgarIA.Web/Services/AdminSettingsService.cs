@@ -19,6 +19,12 @@ public static class AdminSettingsService
         ["EasyHiddenLayers"] = (s, v) => { if (JsonConvert.DeserializeObject<List<int>>(v) is { } list) s.EasyHiddenLayers = list; },
         ["MediumHiddenLayers"] = (s, v) => { if (JsonConvert.DeserializeObject<List<int>>(v) is { } list) s.MediumHiddenLayers = list; },
         ["HardHiddenLayers"] = (s, v) => { if (JsonConvert.DeserializeObject<List<int>>(v) is { } list) s.HardHiddenLayers = list; },
+        ["PPO.BufferSize"] = (s, v) => { if (int.TryParse(v, out var i)) s.PPO.BufferSize = i; },
+        ["PPO.MinibatchSize"] = (s, v) => { if (int.TryParse(v, out var i)) s.PPO.MinibatchSize = i; },
+        ["PPO.Epochs"] = (s, v) => { if (int.TryParse(v, out var i)) s.PPO.Epochs = i; },
+        ["PPO.LearningRate"] = (s, v) => { if (float.TryParse(v, System.Globalization.CultureInfo.InvariantCulture, out var f)) s.PPO.LearningRate = f; },
+        ["PPO.EntropyCoeff"] = (s, v) => { if (float.TryParse(v, System.Globalization.CultureInfo.InvariantCulture, out var f)) s.PPO.EntropyCoeff = f; },
+        ["PPO.ClipEpsilon"] = (s, v) => { if (float.TryParse(v, System.Globalization.CultureInfo.InvariantCulture, out var f)) s.PPO.ClipEpsilon = f; },
     };
 
     public static async Task Load(AdminDbContext db, GameSettings settings)
@@ -46,6 +52,12 @@ public static class AdminSettingsService
             ["EasyHiddenLayers"] = JsonConvert.SerializeObject(settings.EasyHiddenLayers),
             ["MediumHiddenLayers"] = JsonConvert.SerializeObject(settings.MediumHiddenLayers),
             ["HardHiddenLayers"] = JsonConvert.SerializeObject(settings.HardHiddenLayers),
+            ["PPO.BufferSize"] = settings.PPO.BufferSize.ToString(),
+            ["PPO.MinibatchSize"] = settings.PPO.MinibatchSize.ToString(),
+            ["PPO.Epochs"] = settings.PPO.Epochs.ToString(),
+            ["PPO.LearningRate"] = settings.PPO.LearningRate.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["PPO.EntropyCoeff"] = settings.PPO.EntropyCoeff.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["PPO.ClipEpsilon"] = settings.PPO.ClipEpsilon.ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
 
         foreach (var (key, value) in pairs)
