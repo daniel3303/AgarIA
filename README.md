@@ -125,12 +125,13 @@ The hidden layer architecture for each tier is configurable from the admin Setti
 
 Each tier has its own independent genetic algorithm with a pool of **64 genomes**:
 
-- **Selection**: Tournament selection (pick 12 random, keep the fittest)
+- **Selection**: Tournament selection (pick 4 random, keep the fittest) — moderate pressure balances exploitation with exploration
 - **Elitism**: Top 2 genomes are carried forward unmutated each generation, preserving the best solutions
+- **Random immigrants**: 10% of offspring are fresh random genomes, continuously injecting diversity to prevent population collapse
 - **Block crossover**: 70% chance — picks 1–3 random crossover points and alternates contiguous segments from each parent, preserving neuron-level weight correlations (unlike uniform per-weight crossover which scrambles co-adapted weights)
-- **Adaptive mutation rate**: Scales inversely with genome size using Easy tier (10,374 weights) as reference — Easy ~10%, Medium ~5%, Hard ~2.7%, clamped to [1%, 15%]. Larger networks get gentler mutations to avoid destroying learned structure
-- **Self-adaptive sigma**: Each genome carries its own mutation strength (sigma). Children inherit the average of their parents' sigmas, then sigma itself mutates: `sigma *= exp(τ × gaussian())` where `τ = 1/√genomeSize`. Clamped to [0.005, 1.0]. This lets the population self-tune mutation intensity over generations
-- **Pool management**: When pool exceeds 64, the lowest-fitness genome is removed. Duplicate genomes are prevented — if a genome already exists in the pool, only the higher fitness is kept
+- **Adaptive mutation rate**: Scales inversely with genome size using Easy tier (10,374 weights) as reference — Easy ~15%, Medium ~7.5%, Hard ~4.2%, clamped to [5%, 20%]. Larger networks get gentler mutations to avoid destroying learned structure
+- **Self-adaptive sigma**: Each genome carries its own mutation strength (sigma). Children inherit the average of their parents' sigmas, then sigma itself mutates: `sigma *= exp(τ × gaussian())` where `τ = 1/√genomeSize`. Clamped to [0.05, 1.0]. This lets the population self-tune mutation intensity over generations
+- **Pool management**: When pool exceeds 64, an inverse tournament (pick 4 random, evict the worst) removes a genome — this stochastic eviction preserves more mid-tier diversity than always removing the absolute worst. Fitness is always updated to the latest run, allowing natural turnover when previously dominant genomes underperform
 - **Live checkpoints**: Every 30 seconds, all live bots report their current fitness to the pool. This ensures long-surviving dominant bots keep their genomes competitive without waiting until death
 
 #### Fitness Decay

@@ -16,16 +16,18 @@ public class GeneticAlgorithm
     private int _elitesRemaining;
 
     private const int PoolCapacity = 64;
-    private const double BaseMutationRate = 0.10;
+    private const double BaseMutationRate = 0.15;
     private const int BaseGenomeSize = 10_374;
-    private const double MinMutationRate = 0.01;
-    private const double MaxMutationRate = 0.15;
+    private const double MinMutationRate = 0.05;
+    private const double MaxMutationRate = 0.20;
     private const double DefaultSigma = 0.3;
-    private const double MinSigma = 0.005;
+    private const double MinSigma = 0.05;
     private const double MaxSigma = 1.0;
     private const int EliteCount = 2;
-    private const int TournamentSize = 12;
+    private const int TournamentSize = 4;
     private const double CrossoverRate = 0.7;
+    private const double ImmigrantRate = 0.10;
+    private const int AntiTournamentSize = 4;
     private const double FitnessDecayRate = 0.95;
     private const int DecayIntervalSeconds = 30;
 
@@ -52,6 +54,10 @@ public class GeneticAlgorithm
                 _elitesRemaining--;
                 return (double[])sorted[eliteIndex].Genome.Clone();
             }
+
+            // Random immigrants: inject fresh genomes to maintain diversity
+            if (_random.NextDouble() < ImmigrantRate)
+                return RandomGenome();
 
             var parent1Entry = TournamentSelectEntry();
             var parent2Entry = TournamentSelectEntry();
@@ -85,8 +91,7 @@ public class GeneticAlgorithm
             var existingIdx = _pool.FindIndex(p => ReferenceEquals(p.Genome, genome));
             if (existingIdx >= 0)
             {
-                if (fitness > _pool[existingIdx].Fitness)
-                    _pool[existingIdx] = (genome, fitness, _pool[existingIdx].Sigma);
+                _pool[existingIdx] = (genome, fitness, _pool[existingIdx].Sigma);
             }
             else
             {
@@ -96,14 +101,16 @@ public class GeneticAlgorithm
             bool poolChanged = false;
             if (_pool.Count > PoolCapacity)
             {
-                int worstIdx = 0;
-                double worstFitness = _pool[0].Fitness;
-                for (int i = 1; i < _pool.Count; i++)
+                // Inverse tournament: pick AntiTournamentSize random entries, evict the worst
+                int worstIdx = _random.Next(_pool.Count);
+                double worstFitness = _pool[worstIdx].Fitness;
+                for (int i = 1; i < AntiTournamentSize; i++)
                 {
-                    if (_pool[i].Fitness < worstFitness)
+                    int candidateIdx = _random.Next(_pool.Count);
+                    if (_pool[candidateIdx].Fitness < worstFitness)
                     {
-                        worstFitness = _pool[i].Fitness;
-                        worstIdx = i;
+                        worstFitness = _pool[candidateIdx].Fitness;
+                        worstIdx = candidateIdx;
                     }
                 }
                 _pool.RemoveAt(worstIdx);
