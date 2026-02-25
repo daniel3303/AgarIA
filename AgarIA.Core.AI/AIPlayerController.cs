@@ -27,6 +27,8 @@ public class AIPlayerController : IAIController
     private readonly Dictionary<string, long> _lastShotTick = new();
     private readonly Dictionary<string, long> _spawnTick = new();
     private readonly Dictionary<string, float> _sameTierMassEaten = new();
+    private readonly Dictionary<string, HashSet<int>> _visitedCells = new();
+    private const int GridDivisions = 4; // 4x4 = 16 cells
     private readonly PlayerVelocityTracker _velocityTracker = new();
     private long _currentTick;
     private const int ShootCooldownTicks = 10;
@@ -204,6 +206,7 @@ public class AIPlayerController : IAIController
             _brains[id] = brain;
             _botDifficulty[id] = difficulty;
             _spawnTick[id] = _currentTick;
+            _visitedCells[id] = new HashSet<int>();
         }
     }
 
@@ -295,6 +298,17 @@ public class AIPlayerController : IAIController
         {
             if (perceptions[i] != null)
                 BotPerceptions[bots[i].Id] = perceptions[i];
+        }
+
+        // Track spatial exploration (sequential — cheap O(N) scan)
+        foreach (var bot in bots)
+        {
+            if (_visitedCells.TryGetValue(bot.Id, out var cells))
+            {
+                int cx = Math.Clamp((int)(bot.X / (GameConfig.MapSize / GridDivisions)), 0, GridDivisions - 1);
+                int cy = Math.Clamp((int)(bot.Y / (GameConfig.MapSize / GridDivisions)), 0, GridDivisions - 1);
+                cells.Add(cy * GridDivisions + cx);
+            }
         }
 
         _aiFeatureMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
@@ -684,7 +698,11 @@ public class AIPlayerController : IAIController
             : 1;
         var timeEfficiency = 1.0f / MathF.Sqrt(aliveTicks);
 
-        return adjustedScore * timeEfficiency * monopolyPenalty;
+        var totalCells = GridDivisions * GridDivisions;
+        var visited = _visitedCells.TryGetValue(botId, out var cells) ? cells.Count : 1;
+        var explorationRate = (float)visited / totalCells;
+
+        return adjustedScore * timeEfficiency * monopolyPenalty * explorationRate;
     }
 
     public void RandomizePlayerCount()
@@ -767,6 +785,7 @@ public class AIPlayerController : IAIController
             _spawnTick.Remove(id);
             _lastShotTick.Remove(id);
             _sameTierMassEaten.Remove(id);
+            _visitedCells.Remove(id);
             _velocityTracker.Remove(id);
 
             // Remove split cells

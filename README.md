@@ -141,7 +141,7 @@ At the end of each game round (on reset), all pool entries are multiplied by **0
 The fitness function is designed to reward aggressive, efficient play while discouraging same-tier farming:
 
 ```
-fitness = (score + crossTierMassEaten) × (1 / sqrt(aliveTicks)) × monopolyPenalty
+fitness = (score + crossTierMassEaten) × (1 / sqrt(aliveTicks)) × monopolyPenalty × explorationRate
 ```
 
 | Component | Description |
@@ -150,6 +150,7 @@ fitness = (score + crossTierMassEaten) × (1 / sqrt(aliveTicks)) × monopolyPena
 | **crossTierMassEaten** | Mass gained from eating players of a **different tier or humans only** — same-tier kills are excluded to prevent clone farming (see below) |
 | **1 / sqrt(aliveTicks)** | Time efficiency factor — rewards bots that gain mass quickly rather than surviving passively |
 | **monopolyPenalty** | `1.0 - killerMassShare` — if the killer had most of the total mass, the victim's genome isn't penalized as harshly |
+| **explorationRate** | `visitedCells / 16` — the map is divided into a 4×4 grid (16 cells of 1000×1000 each). Bots that explore more of the map get higher fitness, preventing corner-camping convergence |
 
 #### Why same-tier kills are ignored
 
