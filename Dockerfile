@@ -24,7 +24,9 @@ RUN dotnet publish AgarIA.Web -c Release -o /app
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=build /app .
+RUN mkdir -p /app/data
 EXPOSE 5274
+ENV DATA_DIR=/app/data
 ENV ASPNETCORE_URLS=http://+:5274
 ENV ASPNETCORE_ENVIRONMENT=Production
 ENV Logging__LogLevel__Default=Warning

@@ -11,6 +11,11 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Data directory for persistent files (SQLite DB, genome files)
+var dataDir = Environment.GetEnvironmentVariable("DATA_DIR") ?? Directory.GetCurrentDirectory();
+if (!Directory.Exists(dataDir))
+    Directory.CreateDirectory(dataDir);
+
 builder.Services.Configure<HostOptions>(opts => opts.ShutdownTimeout = TimeSpan.FromSeconds(5));
 
 builder.Services.AddData();
@@ -21,7 +26,7 @@ builder.Services.AddSignalR();
 
 // Admin portal: EF Core + SQLite
 builder.Services.AddDbContext<AdminDbContext>(options =>
-    options.UseSqlite("Data Source=admin.db"));
+    options.UseSqlite($"Data Source={Path.Combine(dataDir, "admin.db")}"));
 
 // ASP.NET Core Identity
 builder.Services.AddIdentity<IdentityUser, IdentityRole>(options => {

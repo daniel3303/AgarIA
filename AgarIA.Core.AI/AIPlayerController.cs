@@ -82,9 +82,10 @@ public class AIPlayerController : IAIController
         _logger = loggerFactory.CreateLogger<AIPlayerController>();
 
         var gaLogger = loggerFactory.CreateLogger<GeneticAlgorithm>();
-        _gaEasy = new GeneticAlgorithm(gaLogger, "ai_genomes_easy.json", NeuralNetwork.GenomeSizeForLayers(gameSettings.EasyHiddenLayers.ToArray()));
-        _gaMedium = new GeneticAlgorithm(gaLogger, "ai_genomes_medium.json", NeuralNetwork.GenomeSizeForLayers(gameSettings.MediumHiddenLayers.ToArray()));
-        _gaHard = new GeneticAlgorithm(gaLogger, "ai_genomes_hard.json", NeuralNetwork.GenomeSizeForLayers(gameSettings.HardHiddenLayers.ToArray()));
+        var dataDir = Environment.GetEnvironmentVariable("DATA_DIR") ?? Directory.GetCurrentDirectory();
+        _gaEasy = new GeneticAlgorithm(gaLogger, Path.Combine(dataDir, "ai_genomes_easy.json"), NeuralNetwork.GenomeSizeForLayers(gameSettings.EasyHiddenLayers.ToArray()));
+        _gaMedium = new GeneticAlgorithm(gaLogger, Path.Combine(dataDir, "ai_genomes_medium.json"), NeuralNetwork.GenomeSizeForLayers(gameSettings.MediumHiddenLayers.ToArray()));
+        _gaHard = new GeneticAlgorithm(gaLogger, Path.Combine(dataDir, "ai_genomes_hard.json"), NeuralNetwork.GenomeSizeForLayers(gameSettings.HardHiddenLayers.ToArray()));
     }
 
     private GeneticAlgorithm GetGA(BotDifficulty diff) => diff switch

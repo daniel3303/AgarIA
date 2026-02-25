@@ -36,10 +36,10 @@ The server starts on a local port (shown in the terminal). Open the URL in your 
 Pull the pre-built image from Docker Hub:
 
 ```bash
-docker run -p 5274:5274 -v agaria-data:/app daniel3303/agaria:latest
+docker run -p 5274:5274 -v agaria-data:/app/data daniel3303/agaria:latest
 ```
 
-The volume persists the SQLite database (`admin.db`) and evolved genome files (`ai_genomes_*.json`) across container restarts.
+The volume mounts to `/app/data`, persisting the SQLite database (`admin.db`) and evolved genome files (`ai_genomes_*.json`) across container restarts.
 
 Open `http://localhost:5274` in your browser.
 
