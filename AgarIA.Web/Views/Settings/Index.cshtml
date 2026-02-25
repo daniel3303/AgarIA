@@ -69,7 +69,6 @@
                         <fieldset class="fieldset" style="@(Model.EasyEnabled ? "" : "opacity:0.5")">
                             <legend class="fieldset-legend">Easy</legend>
                             <label class="label cursor-pointer justify-start gap-2 mb-1">
-                                <input type="hidden" name="easyEnabled" value="false" />
                                 <input type="checkbox" name="easyEnabled" value="true" class="checkbox checkbox-xs" @(Model.EasyEnabled ? "checked" : "") data-tier-toggle="easy" />
                                 <span class="label-text text-xs">Enabled</span>
                             </label>
@@ -79,7 +78,6 @@
                         <fieldset class="fieldset" style="@(Model.MediumEnabled ? "" : "opacity:0.5")">
                             <legend class="fieldset-legend">Medium</legend>
                             <label class="label cursor-pointer justify-start gap-2 mb-1">
-                                <input type="hidden" name="mediumEnabled" value="false" />
                                 <input type="checkbox" name="mediumEnabled" value="true" class="checkbox checkbox-xs" @(Model.MediumEnabled ? "checked" : "") data-tier-toggle="medium" />
                                 <span class="label-text text-xs">Enabled</span>
                             </label>
@@ -89,7 +87,6 @@
                         <fieldset class="fieldset" style="@(Model.HardEnabled ? "" : "opacity:0.5")">
                             <legend class="fieldset-legend">Hard</legend>
                             <label class="label cursor-pointer justify-start gap-2 mb-1">
-                                <input type="hidden" name="hardEnabled" value="false" />
                                 <input type="checkbox" name="hardEnabled" value="true" class="checkbox checkbox-xs" @(Model.HardEnabled ? "checked" : "") data-tier-toggle="hard" />
                                 <span class="label-text text-xs">Enabled</span>
                             </label>
