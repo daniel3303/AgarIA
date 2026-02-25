@@ -42,6 +42,7 @@ public class SettingsController : AdminBaseController
         int minAIPlayers, int maxAIPlayers, double resetAtScore, int minResetSeconds, int maxResetSeconds,
         bool maxSpeed, ResetType resetType,
         string easyHiddenLayers, string mediumHiddenLayers, string hardHiddenLayers,
+        bool heuristicEnabled, int heuristicPlayerCount, bool heuristicCanEatEachOther,
         bool easyEnabled, bool mediumEnabled, bool hardEnabled,
         string ppoLearningRate, int ppoBufferSize, int ppoMinibatchSize, int ppoEpochs,
         float ppoEntropyCoeff, float ppoClipEpsilon) {
@@ -53,6 +54,9 @@ public class SettingsController : AdminBaseController
         _gameSettings.MaxResetSeconds = Math.Max(_gameSettings.MinResetSeconds, maxResetSeconds);
         _gameSettings.MaxSpeed = maxSpeed;
         _gameSettings.ResetType = resetType;
+        _gameSettings.HeuristicEnabled = heuristicEnabled;
+        _gameSettings.HeuristicPlayerCount = Math.Clamp(heuristicPlayerCount, 0, 50);
+        _gameSettings.HeuristicCanEatEachOther = heuristicCanEatEachOther;
 
         // Apply tier enable/disable
         _gameSettings.EasyEnabled = easyEnabled;

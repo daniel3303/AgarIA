@@ -8,9 +8,9 @@ public class HeuristicPlayerController
     private readonly PlayerRepository _playerRepository;
     private readonly FoodRepository _foodRepository;
     private readonly SharedGrids _grids;
+    private readonly GameSettings _gameSettings;
     private readonly Random _random = new();
-    private const int PlayerCount = 4;
-    private readonly string[] _playerIds = new string[PlayerCount];
+    private readonly List<string> _playerIds = new();
 
     private readonly List<FoodItem> _foodBuffer = new();
     private readonly List<Player> _playerBuffer = new();
@@ -18,16 +18,37 @@ public class HeuristicPlayerController
     public HeuristicPlayerController(
         PlayerRepository playerRepository,
         FoodRepository foodRepository,
-        SharedGrids grids)
+        SharedGrids grids,
+        GameSettings gameSettings)
     {
         _playerRepository = playerRepository;
         _foodRepository = foodRepository;
         _grids = grids;
+        _gameSettings = gameSettings;
     }
 
     public void Tick(long currentTick)
     {
-        for (int idx = 0; idx < PlayerCount; idx++)
+        var targetCount = _gameSettings.HeuristicEnabled ? _gameSettings.HeuristicPlayerCount : 0;
+
+        // Remove excess players
+        while (_playerIds.Count > targetCount)
+        {
+            var last = _playerIds[^1];
+            var player = _playerRepository.Get(last);
+            if (player != null)
+            {
+                player.IsAlive = false;
+                _playerRepository.Remove(last);
+            }
+            _playerIds.RemoveAt(_playerIds.Count - 1);
+        }
+
+        // Spawn up to target count
+        while (_playerIds.Count < targetCount)
+            _playerIds.Add(null);
+
+        for (int idx = 0; idx < _playerIds.Count; idx++)
             TickOne(idx, currentTick);
     }
 
@@ -46,6 +67,7 @@ public class HeuristicPlayerController
         // Compute flee vector from threats
         double fleeX = 0, fleeY = 0;
         bool hasCloseThreat = false;
+        bool cannibalism = _gameSettings.HeuristicCanEatEachOther;
 
         foreach (var other in nearbyPlayers)
         {
@@ -54,7 +76,7 @@ public class HeuristicPlayerController
             bool isTeammate = IsHeuristic(other);
 
             // Flee from threats (bigger players that can eat us)
-            if (!isTeammate && other.Mass > player.Mass * GameConfig.EatSizeRatio)
+            if ((!isTeammate || cannibalism) && other.Mass > player.Mass * GameConfig.EatSizeRatio)
             {
                 var dx = other.X - player.X;
                 var dy = other.Y - player.Y;
@@ -67,8 +89,8 @@ public class HeuristicPlayerController
                     fleeY -= dy / dist * weight;
                 }
             }
-            // Avoid heuristic teammates — gentle repulsion so they spread out
-            else if (isTeammate)
+            // Avoid heuristic teammates — gentle repulsion so they spread out (only when cannibalism is off)
+            else if (isTeammate && !cannibalism)
             {
                 var dx = other.X - player.X;
                 var dy = other.Y - player.Y;
@@ -114,7 +136,7 @@ public class HeuristicPlayerController
         foreach (var other in nearbyPlayers)
         {
             if (other.Id == player.Id || other.OwnerId == player.Id) continue;
-            if (IsHeuristic(other)) continue; // don't chase teammates
+            if (IsHeuristic(other) && !cannibalism) continue; // don't chase teammates unless cannibalism is on
             if (player.Mass <= other.Mass * GameConfig.EatSizeRatio) continue; // can't eat
 
             var dx = other.X - player.X;
@@ -157,6 +179,6 @@ public class HeuristicPlayerController
 
     public void OnGameReset()
     {
-        Array.Clear(_playerIds);
+        _playerIds.Clear();
     }
 }

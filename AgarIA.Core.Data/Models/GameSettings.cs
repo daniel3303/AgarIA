@@ -28,6 +28,12 @@ public class GameSettings
 
     public List<int> HardHiddenLayers { get; set; } = [256, 256];
 
+    public bool HeuristicEnabled { get; set; } = true;
+
+    public int HeuristicPlayerCount { get; set; } = 5;
+
+    public bool HeuristicCanEatEachOther { get; set; }
+
     public PPOSettings PPO { get; set; } = new();
 }
 

@@ -22,6 +22,40 @@
                 </div>
             </div>
 
+            <!-- Heuristic Players card -->
+            <div class="card bg-base-100 border border-base-200 mb-3" id="heuristicCard">
+                <div class="card-body p-3">
+                    <h3 class="font-semibold text-sm">Heuristic Players</h3>
+                    <label class="label cursor-pointer justify-start gap-3 mb-1">
+                        <input type="checkbox" name="heuristicEnabled" value="true" class="checkbox checkbox-xs"
+                               @(Model.HeuristicEnabled ? "checked" : "") id="heuristicEnabledCb" />
+                        <span class="label-text">Enabled</span>
+                    </label>
+                    <div role="alert" class="alert alert-error text-xs py-2 mb-2" id="heuristicWarning"
+                         style="@(Model.HeuristicEnabled ? "display:none" : "")">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span>When disabled, PPO bots will not have heuristic opponents to learn from during early training (first 25k transitions use heuristic demonstrations regardless).</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Count</legend>
+                            <input type="number" name="heuristicPlayerCount" class="input input-sm w-full"
+                                   min="0" max="50" value="@Model.HeuristicPlayerCount" />
+                        </fieldset>
+                        <fieldset class="fieldset">
+                            <legend class="fieldset-legend">Can Eat Each Other</legend>
+                            <label class="label cursor-pointer justify-start gap-2">
+                                <input type="checkbox" name="heuristicCanEatEachOther" value="true" class="checkbox checkbox-xs"
+                                       @(Model.HeuristicCanEatEachOther ? "checked" : "") />
+                                <span class="label-text text-xs">Allow cannibalism</span>
+                            </label>
+                        </fieldset>
+                    </div>
+                </div>
+            </div>
+
             <!-- Game Reset card -->
             <div class="card bg-base-100 border border-base-200 mb-3">
                 <div class="card-body p-3">
@@ -194,6 +228,16 @@
             cb.closest('fieldset').style.opacity = cb.checked ? '' : '0.5';
         });
     });
+
+    // Toggle heuristic card opacity and danger warning based on enabled checkbox
+    const heuristicCb = document.getElementById('heuristicEnabledCb');
+    const heuristicWarning = document.getElementById('heuristicWarning');
+    const heuristicCard = document.getElementById('heuristicCard');
+    heuristicCb.addEventListener('change', () => {
+        heuristicWarning.style.display = heuristicCb.checked ? 'none' : '';
+        heuristicCard.style.opacity = heuristicCb.checked ? '' : '0.7';
+    });
+    if (!heuristicCb.checked) heuristicCard.style.opacity = '0.7';
 
     // Confirm before resetting game
     document.getElementById('resetGameBtn').addEventListener('click', () => {
