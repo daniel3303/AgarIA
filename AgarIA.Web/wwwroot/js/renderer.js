@@ -18,6 +18,9 @@ const Renderer = (() => {
     const trails = new Map();
     const TRAIL_LENGTH = 20;
 
+    // Smooth radius interpolation per player
+    const smoothRadius = new Map();
+
     function init() {
         canvas = document.getElementById("gameCanvas");
         ctx = canvas.getContext("2d");
@@ -31,8 +34,65 @@ const Renderer = (() => {
         canvas.height = window.innerHeight;
     }
 
+    // Lighten a hex color by blending toward white
+    function lightenColor(hex, amount) {
+        let r, g, b;
+        if (hex.length === 4) {
+            r = parseInt(hex[1] + hex[1], 16);
+            g = parseInt(hex[2] + hex[2], 16);
+            b = parseInt(hex[3] + hex[3], 16);
+        } else {
+            r = parseInt(hex.slice(1, 3), 16);
+            g = parseInt(hex.slice(3, 5), 16);
+            b = parseInt(hex.slice(5, 7), 16);
+        }
+        r = Math.round(r + (255 - r) * amount);
+        g = Math.round(g + (255 - g) * amount);
+        b = Math.round(b + (255 - b) * amount);
+        return `rgb(${r},${g},${b})`;
+    }
+
+    // Draw an organic wobbly blob shape using sine-wave perimeter distortion
+    function drawBlob(ctx, x, y, radius, seed, time) {
+        const points = 20;
+        const freq = 3;
+        ctx.beginPath();
+        for (let i = 0; i <= points; i++) {
+            const angle = (i / points) * Math.PI * 2;
+            const wobble = radius * 0.04 * Math.sin(i * freq + seed + time * 1.5);
+            const r = radius + wobble;
+            const px = x + Math.cos(angle) * r;
+            const py = y + Math.sin(angle) * r;
+            if (i === 0) {
+                ctx.moveTo(px, py);
+            } else {
+                // Use quadratic curves for smoothness
+                const prevAngle = ((i - 0.5) / points) * Math.PI * 2;
+                const prevWobble = radius * 0.04 * Math.sin((i - 0.5) * freq + seed + time * 1.5);
+                const prevR = radius + prevWobble;
+                const cpx = x + Math.cos(prevAngle) * prevR;
+                const cpy = y + Math.sin(prevAngle) * prevR;
+                ctx.quadraticCurveTo(cpx, cpy, px, py);
+            }
+        }
+        ctx.closePath();
+    }
+
+    // Simple hash from player ID to get a stable seed
+    function idToSeed(id) {
+        let hash = 0;
+        const str = String(id);
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash |= 0;
+        }
+        return hash;
+    }
+
     // Main render call: clears, draws background/grid, food, trails, then players
     function render(gameState, camera) {
+        const time = performance.now() / 1000;
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#f0f2f5";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -44,11 +104,12 @@ const Renderer = (() => {
         ctx.translate(-camera.x, -camera.y);
 
         drawGrid(camera);
-        drawFood(gameState.food);
+        drawFood(gameState.food, time);
         updateTrails(gameState.players);
+        updateSmoothRadius(gameState.players);
         drawTrails();
         drawProjectiles(gameState.projectiles);
-        drawPlayers(gameState.players, gameState.you);
+        drawPlayers(gameState.players, gameState.you, time);
         drawBorder();
 
         // Bot view range circles
@@ -117,14 +178,15 @@ const Renderer = (() => {
         }
     }
 
-    // Draw food items as small solid circles
-    function drawFood(food) {
+    // Draw food items as pulsing circles
+    function drawFood(food, time) {
         if (!food) return;
         for (const f of food) {
             if (f.ghosted) ctx.globalAlpha = 0.1;
             const color = COLORS[f.colorIndex] || COLORS[0];
+            const r = 4.5 + 1.5 * Math.sin(time * 3 + f.x * 0.1 + f.y * 0.1);
             ctx.beginPath();
-            ctx.arc(f.x, f.y, 5, 0, Math.PI * 2);
+            ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
             if (f.ghosted) ctx.globalAlpha = 1;
@@ -148,6 +210,20 @@ const Renderer = (() => {
         // Remove trails for players no longer present
         for (const [id] of trails) {
             if (!activeIds.has(id)) trails.delete(id);
+        }
+    }
+
+    // Update smooth radius interpolation
+    function updateSmoothRadius(players) {
+        if (!players) return;
+        const activeIds = new Set();
+        for (const p of players) {
+            activeIds.add(p.id);
+            const prev = smoothRadius.get(p.id) ?? p.radius;
+            smoothRadius.set(p.id, prev + (p.radius - prev) * 0.15);
+        }
+        for (const [id] of smoothRadius) {
+            if (!activeIds.has(id)) smoothRadius.delete(id);
         }
     }
 
@@ -195,40 +271,71 @@ const Renderer = (() => {
         }
     }
 
-    // Draw player blobs with soft shadow and username labels
-    function drawPlayers(players, myId) {
+    // Draw player blobs with organic shape, gradient fill, and username labels
+    function drawPlayers(players, myId, time) {
         if (!players) return;
         for (const p of players) {
             if (p.ghosted) ctx.globalAlpha = 0.1;
             const color = COLORS[p.colorIndex] || COLORS[0];
+            const seed = idToSeed(p.id);
+            const radius = smoothRadius.get(p.id) ?? p.radius;
 
-            // Soft drop shadow
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-            ctx.fillStyle = color;
+            // Speed lines when boosting
+            if (p.boosting) {
+                const trail = trails.get(p.id);
+                if (trail && trail.length >= 2) {
+                    const last = trail[trail.length - 1];
+                    const prev = trail[trail.length - 2];
+                    const dx = last.x - prev.x;
+                    const dy = last.y - prev.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0.1) {
+                        const ndx = dx / dist;
+                        const ndy = dy / dist;
+                        // Perpendicular
+                        const px = -ndy;
+                        const py = ndx;
+                        ctx.strokeStyle = hexToRgba(color, 0.15);
+                        ctx.lineWidth = 2;
+                        for (let li = -1; li <= 1; li++) {
+                            const ox = p.x - ndx * radius * 1.2 + px * li * radius * 0.4;
+                            const oy = p.y - ndy * radius * 1.2 + py * li * radius * 0.4;
+                            ctx.beginPath();
+                            ctx.moveTo(ox, oy);
+                            ctx.lineTo(ox - ndx * radius * 0.6, oy - ndy * radius * 0.6);
+                            ctx.stroke();
+                        }
+                    }
+                }
+            }
+
+            // Soft drop shadow using blob shape
+            drawBlob(ctx, p.x, p.y, radius, seed, time);
             ctx.shadowColor = hexToRgba(color, 0.35);
             ctx.shadowBlur = p.boosting ? 25 : 12;
             ctx.shadowOffsetX = 0;
             ctx.shadowOffsetY = 2;
+
+            // Radial gradient fill (3D sphere look)
+            const grad = ctx.createRadialGradient(
+                p.x - radius * 0.25, p.y - radius * 0.25, radius * 0.1,
+                p.x, p.y, radius
+            );
+            grad.addColorStop(0, lightenColor(color, 0.3));
+            grad.addColorStop(1, color);
+            ctx.fillStyle = grad;
             ctx.fill();
             ctx.shadowBlur = 0;
             ctx.shadowOffsetY = 0;
 
-            // Light inner highlight
-            ctx.beginPath();
-            ctx.arc(p.x - p.radius * 0.2, p.y - p.radius * 0.2, p.radius * 0.5, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
-            ctx.fill();
-
-            // Thin outline
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            // Thin outline using blob shape
+            drawBlob(ctx, p.x, p.y, radius, seed, time);
             ctx.strokeStyle = hexToRgba(color, 0.3);
             ctx.lineWidth = 2;
             ctx.stroke();
 
             // Username label
-            const fontSize = Math.max(12, p.radius * 0.4);
+            const fontSize = Math.max(12, radius * 0.4);
             ctx.font = `bold ${fontSize}px 'Inter', 'Segoe UI', system-ui, sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
@@ -242,14 +349,14 @@ const Renderer = (() => {
             if (p.ghosted) ctx.globalAlpha = 1;
             if (p.isLargest) {
                 // Crown/star indicator above player
-                ctx.font = `${Math.max(16, p.radius * 0.5)}px sans-serif`;
+                ctx.font = `${Math.max(16, radius * 0.5)}px sans-serif`;
                 ctx.textAlign = "center";
-                ctx.fillText("\u2B50", p.x, p.y - p.radius - 8);
+                ctx.fillText("\u2B50", p.x, p.y - radius - 8);
             }
             if (p.isSplitCell) {
                 // Chain/link indicator
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, p.radius + 4, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, radius + 4, 0, Math.PI * 2);
                 ctx.strokeStyle = "rgba(253, 203, 110, 0.8)";
                 ctx.lineWidth = 3;
                 ctx.setLineDash([6, 4]);
