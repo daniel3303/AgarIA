@@ -55,7 +55,6 @@ Enter a username and click **PLAY** to join, or **SPECTATE** to watch the AI bot
 |---------|--------|
 | **Mouse** | Move toward cursor |
 | **Space** | Split your cell |
-| **Click** | Shoot a projectile |
 
 ### Game Rules
 
@@ -63,7 +62,6 @@ Enter a username and click **PLAY** to join, or **SPECTATE** to watch the AI bot
 - Eat **food pellets** (+1 mass each) scattered across the 4000x4000 map
 - Eat **other players** by being at least **15% larger** (1.15x mass ratio) and overlapping them
 - **Splitting** divides your cell in two (minimum 24 mass required, max 4 split cells per player). Split cells merge back after a cooldown (200 ticks / 10 seconds)
-- **Shooting** fires a projectile that costs 1 mass. Hitting a smaller player rewards mass proportional to the size difference (up to 20)
 - **Mass decays** over time (0.02% per tick) — you must keep eating to maintain size
 - Eating food or players grants a brief **speed boost**
 - Base speed is 4.0 for all cells regardless of mass
@@ -96,30 +94,27 @@ Each AI bot is controlled by a feedforward neural network with configurable hidd
 - **Hard** `(H)` — default: 2×128 hidden neurons
 
 ```
-Easy:   161 inputs → [64] hidden (tanh) → 6 outputs
-Medium: 161 inputs → [128] hidden (tanh) → 6 outputs
-Hard:   161 inputs → [128, 128] hidden (tanh) → 6 outputs
+Easy:   151 inputs → [64] hidden (tanh) → 3 outputs
+Medium: 151 inputs → [128] hidden (tanh) → 3 outputs
+Hard:   151 inputs → [128, 128] hidden (tanh) → 3 outputs
 ```
 
 The hidden layer architecture for each tier is configurable from the admin Settings page (e.g. "128,64" for two hidden layers of 128 and 64 neurons). Changing a tier's architecture deletes its genome file and resets training.
 
-#### Input Features (161)
+#### Input Features (151)
 
 | Feature Group | Count | Description |
 |---------------|-------|-------------|
 | Self info | 7 | Mass relative to largest, absolute mass (1/mass), can-split flag, two largest cells' positions |
 | Nearest food | 64 | 32 closest food items (dx, dy each) |
 | Nearest players | 80 | 16 closest players (dx, dy, relative mass, vx, vy each) |
-| Nearest projectiles | 10 | 5 closest projectiles (dx, dy each) |
 
-#### Output Decisions (6)
+#### Output Decisions (3)
 
 | Output | Description |
 |--------|-------------|
 | 0-1 | Movement direction (continuous X, Y via tanh, scaled to ±200px offset) |
 | 2 | Split decision (> 0.5 triggers split) |
-| 3 | Shoot decision (> 0.5 triggers shoot) |
-| 4-5 | Shoot direction (dx, dy) |
 
 ### Genetic Algorithm
 
@@ -151,6 +146,10 @@ fitness = (score + crossTierMassEaten) × (1 / sqrt(aliveTicks)) × monopolyPena
 | **1 / sqrt(aliveTicks)** | Time efficiency factor — rewards bots that gain mass quickly rather than surviving passively |
 | **monopolyPenalty** | `1.0 - killerMassShare` — if the killer had most of the total mass, the victim's genome isn't penalized as harshly |
 | **explorationRate** | `visitedCells / 16` — the map is divided into a 4×4 grid (16 cells of 1000×1000 each). Bots that explore more of the map get higher fitness, preventing corner-camping convergence |
+
+#### Easy tier: food-only fitness
+
+Easy bots' fitness ignores player-eating mass entirely (`crossTierMassEaten` is always 0 for Easy). This means Easy bots are rewarded only for eating food and exploring the map, producing simpler foraging behavior distinct from the predatory Medium and Hard tiers.
 
 #### Why same-tier kills are ignored
 

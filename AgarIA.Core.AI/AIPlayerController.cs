@@ -15,7 +15,6 @@ public class AIPlayerController : IAIController
 {
     private readonly PlayerRepository _playerRepository;
     private readonly FoodRepository _foodRepository;
-    private readonly ProjectileRepository _projectileRepository;
     private readonly GeneticAlgorithm _gaEasy;
     private readonly GeneticAlgorithm _gaMedium;
     private readonly GeneticAlgorithm _gaHard;
@@ -24,14 +23,12 @@ public class AIPlayerController : IAIController
     private readonly Random _random = new();
     private readonly Dictionary<string, NeuralNetwork> _brains = new();
     private readonly Dictionary<string, BotDifficulty> _botDifficulty = new();
-    private readonly Dictionary<string, long> _lastShotTick = new();
     private readonly Dictionary<string, long> _spawnTick = new();
     private readonly Dictionary<string, float> _sameTierMassEaten = new();
     private readonly Dictionary<string, HashSet<int>> _visitedCells = new();
     private const int GridDivisions = 4; // 4x4 = 16 cells
     private readonly PlayerVelocityTracker _velocityTracker = new();
     private long _currentTick;
-    private const int ShootCooldownTicks = 10;
     private int _currentMaxAI = new Random().Next(10, 101);
     private readonly SharedGrids _grids;
     public ConcurrentDictionary<string, BotPerception> BotPerceptions { get; } = new();
@@ -70,14 +67,12 @@ public class AIPlayerController : IAIController
     public AIPlayerController(
         PlayerRepository playerRepository,
         FoodRepository foodRepository,
-        ProjectileRepository projectileRepository,
         GameSettings gameSettings,
         SharedGrids grids,
         ILoggerFactory loggerFactory)
     {
         _playerRepository = playerRepository;
         _foodRepository = foodRepository;
-        _projectileRepository = projectileRepository;
         _gameSettings = gameSettings;
         _grids = grids;
         _logger = loggerFactory.CreateLogger<AIPlayerController>();
@@ -218,7 +213,6 @@ public class AIPlayerController : IAIController
 
         // Use shared grids (rebuilt by CollisionManager earlier in tick)
         var allPlayers = _grids.PlayerGrid.AllItems;
-        var allProjectiles = _projectileRepository.GetAlive().ToList();
 
         // Update velocity tracker before parallel phase
         _velocityTracker.Update(allPlayers);
@@ -252,8 +246,8 @@ public class AIPlayerController : IAIController
 
         // Phase 1: Combined grid query + feature build + BotPerception in single Parallel.For
         ts = Stopwatch.GetTimestamp();
-        const int featureSize = 161;
-        const int outputSize = 6;
+        const int featureSize = 151;
+        const int outputSize = 3;
         var batchInputs = new float[bots.Count * featureSize];
         var batchNetworks = new NeuralNetwork[bots.Count];
         var botHasBrain = new bool[bots.Count];
@@ -281,14 +275,14 @@ public class AIPlayerController : IAIController
             // Build features and collect sorted IDs for BotPerception
             largestSplitByOwner.TryGetValue(bot.Id, out var secondCell);
             var features = BuildFeatureVector(
-                bot, nearbyFood, nearbyPlayers, allProjectiles, secondCell, globalLargest,
-                out var foodIds, out var playerIds, out var projIds);
+                bot, nearbyFood, nearbyPlayers, secondCell, globalLargest,
+                out var foodIds, out var playerIds);
             features.AsSpan().CopyTo(batchInputs.AsSpan(i * featureSize, featureSize));
             batchNetworks[i] = brain;
             botHasBrain[i] = true;
 
             var largestId = globalLargest != null && globalLargest.Id != bot.Id ? globalLargest.Id : null;
-            perceptions[i] = new BotPerception(foodIds, playerIds, projIds, largestId, 800, 1600);
+            perceptions[i] = new BotPerception(foodIds, playerIds, largestId, 800, 1600);
 
             return buffers;
         }, _ => { });
@@ -341,7 +335,6 @@ public class AIPlayerController : IAIController
 
         // Per-bot command slots (lock-free)
         var wantsSplit = new bool[bots.Count];
-        var shootDir = new (float nx, float ny)?[bots.Count];
 
         Parallel.For(0, decisions.Length, i =>
         {
@@ -364,44 +357,13 @@ public class AIPlayerController : IAIController
             // Flag split
             if (output[2] > 0.5f && bot.Mass >= GameConfig.MinSplitMass)
                 wantsSplit[i] = true;
-
-            // Compute shoot direction
-            var lastShot = _lastShotTick.GetValueOrDefault(bot.Id, 0);
-            if (output[3] > 0.5f && bot.Mass > GameConfig.MinMass && currentTick - lastShot >= ShootCooldownTicks)
-            {
-                var shootDx = output[4];
-                var shootDy = output[5];
-                var shootDist = MathF.Sqrt(shootDx * shootDx + shootDy * shootDy);
-                if (shootDist > 0.01f)
-                    shootDir[i] = (shootDx / shootDist, shootDy / shootDist);
-            }
         });
 
-        // Serial phase: apply split and shoot commands (shared state mutations)
+        // Serial phase: apply split commands (shared state mutations)
         for (int i = 0; i < bots.Count; i++)
         {
             if (wantsSplit[i])
                 SplitBot(bots[i], currentTick, splitCellsByOwner);
-
-            if (shootDir[i] is var (nx, ny))
-            {
-                var bot = bots[i];
-                _lastShotTick[bot.Id] = currentTick;
-                bot.Mass -= 1;
-
-                var projectile = new Projectile
-                {
-                    Id = _projectileRepository.NextId(),
-                    X = bot.X + nx * bot.Radius,
-                    Y = bot.Y + ny * bot.Radius,
-                    VX = nx * GameConfig.ProjectileSpeed,
-                    VY = ny * GameConfig.ProjectileSpeed,
-                    OwnerId = bot.Id,
-                    OwnerMassAtFire = bot.Mass,
-                    IsAlive = true
-                };
-                _projectileRepository.Add(projectile);
-            }
         }
 
         _aiSeqMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
@@ -458,11 +420,11 @@ public class AIPlayerController : IAIController
     }
 
     private float[] BuildFeatureVector(
-        Player bot, List<FoodItem> allFood, List<Player> nearbyPlayers, List<Projectile> allProjectiles,
+        Player bot, List<FoodItem> allFood, List<Player> nearbyPlayers,
         Player secondCell, Player globalLargest,
-        out List<int> outFoodIds, out List<string> outPlayerIds, out List<int> outProjIds)
+        out List<int> outFoodIds, out List<string> outPlayerIds)
     {
-        var features = new float[161];
+        var features = new float[151];
         int idx = 0;
 
         var botX = (float)bot.X;
@@ -587,78 +549,7 @@ public class AIPlayerController : IAIController
             }
         }
 
-        // 5 nearest projectiles (10) — partial selection
-        const int topProjK = 5;
-        Span<(float dx, float dy, float distSq, int id)> topProj = stackalloc (float, float, float, int)[topProjK];
-        int topProjCount = 0;
-
-        foreach (var p in allProjectiles)
-        {
-            if (p.OwnerId == bot.Id) continue;
-            var dx = (float)p.X - botX;
-            var dy = (float)p.Y - botY;
-            var distSq = dx * dx + dy * dy;
-
-            if (topProjCount < topProjK)
-            {
-                topProj[topProjCount++] = (dx, dy, distSq, p.Id);
-                if (topProjCount == topProjK)
-                    SortSpan(ref topProj);
-            }
-            else if (distSq < topProj[topProjK - 1].distSq)
-            {
-                topProj[topProjK - 1] = (dx, dy, distSq, p.Id);
-                InsertSorted(ref topProj, topProjK);
-            }
-        }
-
-        if (topProjCount < topProjK)
-            SortSpan(ref topProj, topProjCount);
-
-        outProjIds = new List<int>(topProjCount);
-        for (int i = 0; i < topProjK; i++)
-        {
-            if (i < topProjCount)
-            {
-                features[idx++] = topProj[i].dx / mapSize;
-                features[idx++] = topProj[i].dy / mapSize;
-                outProjIds.Add(topProj[i].id);
-            }
-            else
-            {
-                idx += 2;
-            }
-        }
-
         return features;
-    }
-
-    private static void SortSpan(ref Span<(float dx, float dy, float distSq, int id)> span, int count = -1)
-    {
-        var len = count < 0 ? span.Length : count;
-        for (int i = 1; i < len; i++)
-        {
-            var key = span[i];
-            int j = i - 1;
-            while (j >= 0 && span[j].distSq > key.distSq)
-            {
-                span[j + 1] = span[j];
-                j--;
-            }
-            span[j + 1] = key;
-        }
-    }
-
-    private static void InsertSorted(ref Span<(float dx, float dy, float distSq, int id)> span, int len)
-    {
-        for (int i = len - 1; i > 0; i--)
-        {
-            if (span[i].distSq < span[i - 1].distSq)
-            {
-                (span[i], span[i - 1]) = (span[i - 1], span[i]);
-            }
-            else break;
-        }
     }
 
     private static void InsertSortedFood((float dx, float dy, float distSq, int id)[] arr, int len)
@@ -772,18 +663,21 @@ public class AIPlayerController : IAIController
 
             if (_brains.TryGetValue(id, out var brain))
             {
-                var ga = _botDifficulty.TryGetValue(id, out var diff) ? GetGA(diff) : _gaEasy;
+                var diff = _botDifficulty.TryGetValue(id, out var d) ? d : BotDifficulty.Easy;
+                var ga = GetGA(diff);
                 var score = (float)(player?.Score ?? 0.0);
                 var playerMassEaten = (float)(player?.MassEatenFromPlayers ?? 0);
                 var sameTierEaten = _sameTierMassEaten.TryGetValue(id, out var st) ? st : 0f;
                 var crossTierMassEaten = Math.Max(0, playerMassEaten - sameTierEaten);
                 var killerMassShare = (float)(player?.KillerMassShare ?? 0);
-                ga.ReportFitness(brain.GetGenome(), ComputeFitness(id, score, crossTierMassEaten, killerMassShare));
+
+                // Easy bots: fitness ignores player-eating mass (food-only)
+                var effectiveCrossTier = diff == BotDifficulty.Easy ? 0f : crossTierMassEaten;
+                ga.ReportFitness(brain.GetGenome(), ComputeFitness(id, score, effectiveCrossTier, killerMassShare));
                 _brains.Remove(id);
             }
             _botDifficulty.Remove(id);
             _spawnTick.Remove(id);
-            _lastShotTick.Remove(id);
             _sameTierMassEaten.Remove(id);
             _visitedCells.Remove(id);
             _velocityTracker.Remove(id);

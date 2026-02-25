@@ -19,16 +19,13 @@ public interface IGameHub
 public class GameHub : Hub<IGameHub>
 {
     private readonly PlayerRepository _playerRepository;
-    private readonly ProjectileRepository _projectileRepository;
     private readonly GameEngine _gameEngine;
     private readonly GameState _gameState;
     private readonly Random _random = new();
-    private static readonly Dictionary<string, long> _lastShotTime = new();
 
-    public GameHub(PlayerRepository playerRepository, ProjectileRepository projectileRepository, GameEngine gameEngine, GameState gameState)
+    public GameHub(PlayerRepository playerRepository, GameEngine gameEngine, GameState gameState)
     {
         _playerRepository = playerRepository;
-        _projectileRepository = projectileRepository;
         _gameEngine = gameEngine;
         _gameState = gameState;
     }
@@ -121,42 +118,6 @@ public class GameHub : Hub<IGameHub>
         }
     }
 
-    public void Shoot(double targetX, double targetY)
-    {
-        var player = _playerRepository.Get(Context.ConnectionId);
-        if (player == null || !player.IsAlive || player.Mass <= GameConfig.MinMass) return;
-
-        // Rate limit: max 10 shots per second (100ms cooldown)
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var lastShot = _lastShotTime.GetValueOrDefault(Context.ConnectionId, 0);
-        if (now - lastShot < 100) return;
-        _lastShotTime[Context.ConnectionId] = now;
-
-        player.Mass -= 1;
-
-        var dx = targetX - player.X;
-        var dy = targetY - player.Y;
-        var dist = Math.Sqrt(dx * dx + dy * dy);
-        if (dist < 1) return;
-
-        var nx = dx / dist;
-        var ny = dy / dist;
-
-        var projectile = new Projectile
-        {
-            Id = _projectileRepository.NextId(),
-            X = player.X + nx * player.Radius,
-            Y = player.Y + ny * player.Radius,
-            VX = nx * GameConfig.ProjectileSpeed,
-            VY = ny * GameConfig.ProjectileSpeed,
-            OwnerId = Context.ConnectionId,
-            OwnerMassAtFire = player.Mass,
-            IsAlive = true
-        };
-
-        _projectileRepository.Add(projectile);
-    }
-
     public async Task Spectate()
     {
         // Remove from humans group if switching from play to spectate
@@ -219,7 +180,6 @@ public class GameHub : Hub<IGameHub>
             _playerRepository.Remove(cell.Id);
         }
         _playerRepository.Remove(Context.ConnectionId);
-        _lastShotTime.Remove(Context.ConnectionId);
         return base.OnDisconnectedAsync(exception);
     }
 }

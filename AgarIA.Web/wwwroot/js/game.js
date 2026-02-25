@@ -1,6 +1,6 @@
 // Main game entry point: manages state, game loop, UI overlays
 (() => {
-    let gameState = { players: [], food: [], projectiles: [], you: null, tick: 0 };
+    let gameState = { players: [], food: [], you: null, tick: 0 };
     let prevState = null;
     let lastUpdateTime = 0;
     let currentUsername = null;
@@ -309,14 +309,10 @@
             };
         });
 
-        const nearProj = new Set(botViewData.projectileIds);
-        const projectiles = (renderState.projectiles || []).map(p => ({ ...p, ghosted: !nearProj.has(p.id) }));
-
         return {
             ...renderState,
             players,
             food,
-            projectiles,
             botViewMeta: { botX: bx, botY: by, foodRadius: botViewData.foodRadius, playerRadius: botViewData.playerRadius, botName: bot.username }
         };
     }
@@ -352,15 +348,13 @@
         }
     }
 
-    // Linearly interpolate player and projectile positions between server snapshots,
-    // with client-side velocity prediction for projectiles beyond the latest tick
+    // Linearly interpolate player positions between server snapshots
     function interpolate() {
         if (!prevState || !gameState.players) return gameState;
 
         const tickMs = 1000 / 20; // 50ms per tick
         const elapsed = performance.now() - lastUpdateTime;
-        const tRaw = elapsed / tickMs;
-        const t = Math.min(tRaw, 1);
+        const t = Math.min(elapsed / tickMs, 1);
 
         const interpolatedPlayers = gameState.players.map(p => {
             const prev = prevState.players ? prevState.players.find(pp => pp.id === p.id) : null;
@@ -372,23 +366,7 @@
             };
         });
 
-        // Interpolate projectiles using velocity derived from last two snapshots
-        const interpolatedProjectiles = (gameState.projectiles || []).map(p => {
-            const prev = prevState.projectiles ? prevState.projectiles.find(pp => pp.id === p.id) : null;
-            if (!prev) return p;
-            // Derive per-tick velocity from the two snapshots
-            const vx = p.x - prev.x;
-            const vy = p.y - prev.y;
-            // Interpolate within tick, extrapolate beyond using velocity prediction
-            const tProj = Math.min(tRaw, 2);
-            return {
-                ...p,
-                x: prev.x + vx * tProj,
-                y: prev.y + vy * tProj
-            };
-        });
-
-        return { ...gameState, players: interpolatedPlayers, projectiles: interpolatedProjectiles };
+        return { ...gameState, players: interpolatedPlayers };
     }
 
     // Smoothly move camera to center on the player, zoom out as mass grows

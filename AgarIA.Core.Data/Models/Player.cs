@@ -23,5 +23,5 @@ public class Player
     public double MassEatenFromPlayers { get; set; }
     public int FoodEaten { get; set; }
     public int PlayersKilled { get; set; }
-    public double ProjectileMassGained { get; set; }
+
 }

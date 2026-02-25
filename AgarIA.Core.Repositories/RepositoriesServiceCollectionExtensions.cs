@@ -10,7 +10,7 @@ public static class RepositoriesServiceCollectionExtensions
         services.AutoWireServicesFrom<RepositoriesAssembly>();
         services.AddSingleton<PlayerRepository>();
         services.AddSingleton<FoodRepository>();
-        services.AddSingleton<ProjectileRepository>();
+
         return services;
     }
 }

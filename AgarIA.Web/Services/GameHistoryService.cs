@@ -41,8 +41,7 @@ public class GameHistoryService : IGameResetHandler
                 TotalMass = player.Mass,
                 FoodEaten = player.FoodEaten,
                 PlayersKilled = player.PlayersKilled,
-                PlayerMassEaten = player.MassEatenFromPlayers,
-                ProjectileMassGained = player.ProjectileMassGained
+                PlayerMassEaten = player.MassEatenFromPlayers
             });
         }
 

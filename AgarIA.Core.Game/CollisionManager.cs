@@ -144,43 +144,6 @@ public class CollisionManager
         return MergeResults(results);
     }
 
-    public List<(Projectile proj, Player target, float sizeRatio)> CheckProjectileCollisions(List<Projectile> projectiles)
-    {
-        var results = new (Projectile proj, Player target, float sizeRatio)?[projectiles.Count];
-        Parallel.For(0, projectiles.Count, () => new List<Player>(), (i, _, buffer) =>
-        {
-            var proj = projectiles[i];
-            if (!proj.IsAlive) return buffer;
-
-            var nearby = _grids.PlayerGrid.Query(proj.X, proj.Y, 200, buffer);
-            foreach (var player in nearby)
-            {
-                var ownerId = player.OwnerId ?? player.Id;
-                if (ownerId == proj.OwnerId) continue;
-
-                var dx = proj.X - player.X;
-                var dy = proj.Y - player.Y;
-
-                if (dx * dx + dy * dy < player.Radius * player.Radius)
-                {
-                    var sizeRatio = (float)(player.Mass / Math.Max(1, proj.OwnerMassAtFire));
-                    results[i] = (proj, player, sizeRatio);
-                    break;
-                }
-            }
-
-            return buffer;
-        }, _ => { });
-
-        var hits = new List<(Projectile, Player, float)>();
-        foreach (var r in results)
-        {
-            if (r.HasValue)
-                hits.Add(r.Value);
-        }
-        return hits;
-    }
-
     private static bool AreOwnedBySame(Player a, Player b)
     {
         var ownerA = a.OwnerId ?? a.Id;

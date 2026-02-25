@@ -52,7 +52,7 @@ const Renderer = (() => {
         return `rgb(${r},${g},${b})`;
     }
 
-    // Build a map of attract points for engulfing effect: larger cells stretch toward smaller overlapping prey
+    // Build a map of attract points for engulfing effect: larger cells stretch toward smaller nearby prey
     function getAttractPoints(players) {
         const attractMap = new Map();
         if (!players) return attractMap;
@@ -62,57 +62,63 @@ const Renderer = (() => {
             for (let j = i + 1; j < players.length; j++) {
                 const b = players[j];
                 const rb = smoothRadius.get(b.id) ?? b.radius;
+                // Determine which is larger
+                let big, bigR, small, smallR;
                 if (ra > rb * 1.1) {
-                    const dx = b.x - a.x;
-                    const dy = b.y - a.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < ra) {
-                        const overlap = 1 - dist / ra;
-                        if (!attractMap.has(a.id)) attractMap.set(a.id, []);
-                        attractMap.get(a.id).push({ x: b.x, y: b.y, radius: rb, overlap });
-                    }
+                    big = a; bigR = ra; small = b; smallR = rb;
                 } else if (rb > ra * 1.1) {
-                    const dx = a.x - b.x;
-                    const dy = a.y - b.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < rb) {
-                        const overlap = 1 - dist / rb;
-                        if (!attractMap.has(b.id)) attractMap.set(b.id, []);
-                        attractMap.get(b.id).push({ x: a.x, y: a.y, radius: ra, overlap });
-                    }
+                    big = b; bigR = rb; small = a; smallR = ra;
+                } else {
+                    continue;
+                }
+                const dx = small.x - big.x;
+                const dy = small.y - big.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                // Trigger when edge-to-edge gap < 50% of bigger radius (starts early, ramps up)
+                const edgeGap = dist - bigR;
+                if (edgeGap < bigR * 0.5) {
+                    // proximity: 0 = just entering range, 1 = fully overlapping
+                    const proximity = Math.min(1, 1 - edgeGap / (bigR * 0.5));
+                    if (!attractMap.has(big.id)) attractMap.set(big.id, []);
+                    attractMap.get(big.id).push({ x: small.x, y: small.y, radius: smallR, proximity });
                 }
             }
         }
         return attractMap;
     }
 
+    // Compute engulfing radius extension for a perimeter point
+    function engulfStretch(angle, x, y, radius, attractPoints) {
+        if (!attractPoints) return 0;
+        let stretch = 0;
+        const dirX = Math.cos(angle);
+        const dirY = Math.sin(angle);
+        for (const ap of attractPoints) {
+            const toX = ap.x - x;
+            const toY = ap.y - y;
+            const len = Math.sqrt(toX * toX + toY * toY) || 1;
+            // How much this perimeter direction faces the prey
+            const dot = dirX * (toX / len) + dirY * (toY / len);
+            if (dot > 0.3) {
+                // Smooth ramp: wider angular coverage, stronger effect
+                const alignment = (dot - 0.3) / 0.7; // 0..1
+                // Up to 35% radius stretch, eased with squared proximity
+                stretch += radius * 0.35 * alignment * alignment * ap.proximity * ap.proximity;
+            }
+        }
+        return stretch;
+    }
+
     // Draw an organic wobbly blob shape using sine-wave perimeter distortion
-    // attractPoints: optional array of {x, y, radius, overlap} for engulfing stretch
+    // attractPoints: optional array of {x, y, radius, proximity} for engulfing stretch
     function drawBlob(ctx, x, y, radius, seed, time, attractPoints) {
-        const points = 20;
+        const points = 36;
         const freq = 3;
         ctx.beginPath();
         for (let i = 0; i <= points; i++) {
             const angle = (i / points) * Math.PI * 2;
             const wobble = radius * 0.04 * Math.sin(i * freq + seed + time * 1.5);
-            let r = radius + wobble;
-
-            // Engulfing stretch toward attract points
-            if (attractPoints) {
-                const dirX = Math.cos(angle);
-                const dirY = Math.sin(angle);
-                for (const ap of attractPoints) {
-                    const toX = ap.x - x;
-                    const toY = ap.y - y;
-                    const len = Math.sqrt(toX * toX + toY * toY) || 1;
-                    const dot = dirX * (toX / len) + dirY * (toY / len);
-                    if (dot > 0.5) {
-                        const alignment = (dot - 0.5) * 2; // 0..1
-                        r += radius * 0.15 * alignment * ap.overlap;
-                    }
-                }
-            }
-
+            const r = radius + wobble + engulfStretch(angle, x, y, radius, attractPoints);
             const px = x + Math.cos(angle) * r;
             const py = y + Math.sin(angle) * r;
             if (i === 0) {
@@ -121,23 +127,7 @@ const Renderer = (() => {
                 // Use quadratic curves for smoothness
                 const prevAngle = ((i - 0.5) / points) * Math.PI * 2;
                 const prevWobble = radius * 0.04 * Math.sin((i - 0.5) * freq + seed + time * 1.5);
-                let prevR = radius + prevWobble;
-
-                if (attractPoints) {
-                    const dirX = Math.cos(prevAngle);
-                    const dirY = Math.sin(prevAngle);
-                    for (const ap of attractPoints) {
-                        const toX = ap.x - x;
-                        const toY = ap.y - y;
-                        const len = Math.sqrt(toX * toX + toY * toY) || 1;
-                        const dot = dirX * (toX / len) + dirY * (toY / len);
-                        if (dot > 0.5) {
-                            const alignment = (dot - 0.5) * 2;
-                            prevR += radius * 0.15 * alignment * ap.overlap;
-                        }
-                    }
-                }
-
+                const prevR = radius + prevWobble + engulfStretch(prevAngle, x, y, radius, attractPoints);
                 const cpx = x + Math.cos(prevAngle) * prevR;
                 const cpy = y + Math.sin(prevAngle) * prevR;
                 ctx.quadraticCurveTo(cpx, cpy, px, py);
@@ -176,7 +166,6 @@ const Renderer = (() => {
         updateTrails(gameState.players);
         updateSmoothRadius(gameState.players);
         drawTrails();
-        drawProjectiles(gameState.projectiles);
         drawPlayers(gameState.players, gameState.you, time);
         drawBorder();
 
@@ -307,35 +296,6 @@ const Renderer = (() => {
                 ctx.fillStyle = hexToRgba(color, opacity);
                 ctx.fill();
             }
-        }
-    }
-
-    // Draw projectiles as bright glowing dots
-    function drawProjectiles(projectiles) {
-        if (!projectiles) return;
-        for (const p of projectiles) {
-            if (p.ghosted) ctx.globalAlpha = 0.1;
-            // Outer glow
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(255, 80, 80, 0.15)";
-            ctx.fill();
-
-            // Core
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-            ctx.fillStyle = "#ff4444";
-            ctx.shadowColor = "rgba(255, 68, 68, 0.9)";
-            ctx.shadowBlur = 16;
-            ctx.fill();
-            ctx.shadowBlur = 0;
-
-            // Bright center
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-            ctx.fillStyle = "#ffffff";
-            ctx.fill();
-            if (p.ghosted) ctx.globalAlpha = 1;
         }
     }
 

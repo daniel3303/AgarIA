@@ -14,7 +14,6 @@ public class GameEngine : IHostedService, IDisposable
     private readonly GameState _gameState;
     private readonly PlayerRepository _playerRepository;
     private readonly FoodRepository _foodRepository;
-    private readonly ProjectileRepository _projectileRepository;
     private readonly CollisionManager _collisionManager;
     private readonly IAIController _aiController;
     private readonly IHubContext<GameHub, IGameHub> _hubContext;
@@ -33,8 +32,8 @@ public class GameEngine : IHostedService, IDisposable
     private long _tpsCount;
     private long _lastTpsMeasure = Stopwatch.GetTimestamp();
     private volatile int _currentTps;
-    private readonly double[] _phaseTimesMs = new double[8];
-    private readonly string[] _phaseNames = ["MovePlayers", "MoveProjectiles", "RebuildGrids", "Collisions", "ApplyResults", "DecayMass", "AITick", "Broadcast"];
+    private readonly double[] _phaseTimesMs = new double[7];
+    private readonly string[] _phaseNames = ["MovePlayers", "RebuildGrids", "Collisions", "ApplyResults", "DecayMass", "AITick", "Broadcast"];
     private double _totalTickTimeMs;
     private long _resetIntervalTicks;
     private long _lastResetTick;
@@ -47,7 +46,6 @@ public class GameEngine : IHostedService, IDisposable
         GameState gameState,
         PlayerRepository playerRepository,
         FoodRepository foodRepository,
-        ProjectileRepository projectileRepository,
         CollisionManager collisionManager,
         IAIController aiController,
         IHubContext<GameHub, IGameHub> hubContext,
@@ -58,7 +56,6 @@ public class GameEngine : IHostedService, IDisposable
         _gameState = gameState;
         _playerRepository = playerRepository;
         _foodRepository = foodRepository;
-        _projectileRepository = projectileRepository;
         _collisionManager = collisionManager;
         _aiController = aiController;
         _hubContext = hubContext;
@@ -122,57 +119,49 @@ public class GameEngine : IHostedService, IDisposable
             _phaseTimesMs[0] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             ts = Stopwatch.GetTimestamp();
-            MoveProjectiles();
-            _phaseTimesMs[1] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
-
-            ts = Stopwatch.GetTimestamp();
             _collisionManager.RebuildGrids();
-            _phaseTimesMs[2] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            _phaseTimesMs[1] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             // Detect collisions in parallel (read-only grid queries)
             ts = Stopwatch.GetTimestamp();
             List<(Player eater, FoodItem food)> foodHits = null;
-            List<(Projectile proj, Player target, float sizeRatio)> projHits = null;
             List<(Player eater, Player prey)> playerKills = null;
             List<(Player keeper, Player merged)> merges = null;
-            var projList = _projectileRepository.GetAlive().ToList();
 
             Parallel.Invoke(
                 () => foodHits = _collisionManager.CheckFoodCollisions(),
-                () => projHits = _collisionManager.CheckProjectileCollisions(projList),
                 () => playerKills = _collisionManager.CheckPlayerCollisions(),
                 () => merges = _collisionManager.CheckMerges()
             );
-            _phaseTimesMs[3] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            _phaseTimesMs[2] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             // Apply results sequentially (mutations)
             ts = Stopwatch.GetTimestamp();
-            ApplyProjectileCollisions(projHits);
             ApplyFoodCollisions(foodHits);
             ApplyPlayerCollisions(playerKills);
             ApplyMerges(merges);
-            _phaseTimesMs[4] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            _phaseTimesMs[3] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             ts = Stopwatch.GetTimestamp();
             DecayMass();
             SpawnFood();
-            _phaseTimesMs[5] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            _phaseTimesMs[4] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             ts = Stopwatch.GetTimestamp();
             var scoreTriggered = _aiController.Tick(_gameState.CurrentTick);
-            _phaseTimesMs[6] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            _phaseTimesMs[5] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             ts = Stopwatch.GetTimestamp();
             BroadcastGameState();
-            _phaseTimesMs[7] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+            _phaseTimesMs[6] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             _totalTickTimeMs += Stopwatch.GetElapsedTime(tickStart).TotalMilliseconds;
 
             if (_tpsCount == 0)
             {
-                var parts = new string[8];
+                var parts = new string[7];
                 double phasesSum = 0;
-                for (int pi = 0; pi < 8; pi++)
+                for (int pi = 0; pi < 7; pi++)
                 {
                     parts[pi] = $"{_phaseNames[pi]}={_phaseTimesMs[pi]:F1}ms";
                     phasesSum += _phaseTimesMs[pi];
@@ -319,63 +308,6 @@ public class GameEngine : IHostedService, IDisposable
         }
     }
 
-    private void MoveProjectiles()
-    {
-        foreach (var proj in _projectileRepository.GetAlive().ToList())
-        {
-            proj.X += proj.VX;
-            proj.Y += proj.VY;
-
-            if (proj.X < 0 || proj.X > GameConfig.MapSize || proj.Y < 0 || proj.Y > GameConfig.MapSize)
-            {
-                proj.IsAlive = false;
-                var food = new FoodItem
-                {
-                    Id = _foodRepository.NextId(),
-                    X = Math.Clamp(proj.X, 0, GameConfig.MapSize),
-                    Y = Math.Clamp(proj.Y, 0, GameConfig.MapSize),
-                    ColorIndex = new Random().Next(6)
-                };
-                _foodRepository.Add(food);
-                _projectileRepository.Remove(proj.Id);
-            }
-        }
-    }
-
-    private void ApplyProjectileCollisions(List<(Projectile proj, Player target, float sizeRatio)> hits)
-    {
-        foreach (var (proj, target, sizeRatio) in hits)
-        {
-            proj.IsAlive = false;
-            _projectileRepository.Remove(proj.Id);
-
-            // Damage target: always 1 mass
-            if (target.Mass > GameConfig.MinMass)
-            {
-                target.Mass = Math.Max(GameConfig.MinMass, target.Mass - 1);
-            }
-
-            // Reward shooter: refund based on size ratio, must be at least 2x to gain extra
-            var reward = Math.Min((int)MathF.Floor(sizeRatio), 20);
-            reward = Math.Max(reward, 1);
-            var shooter = _playerRepository.Get(proj.OwnerId);
-            if (shooter != null && shooter.IsAlive)
-            {
-                shooter.Mass += reward;
-                shooter.ProjectileMassGained += reward;
-            }
-
-            var food = new FoodItem
-            {
-                Id = _foodRepository.NextId(),
-                X = proj.X,
-                Y = proj.Y,
-                ColorIndex = new Random().Next(6)
-            };
-            _foodRepository.Add(food);
-        }
-    }
-
     private void DecayMass()
     {
         var players = _playerRepository.GetAlive().ToList();
@@ -431,14 +363,12 @@ public class GameEngine : IHostedService, IDisposable
 
         // Build DTOs in parallel
         object[] players = null;
-        object[] projectilesDtos = null;
         List<FoodDto> addedFood = null;
         List<int> removedFoodIds = null;
         List<FoodDto> fullFood = null;
         bool sendFullFood = false;
 
         var currentTick = _gameState.CurrentTick;
-        var aliveProjectiles = _projectileRepository.GetAlive().ToList();
 
         // Determine if this is a full food sync tick (every 100 ticks = 5 seconds)
         _fullFoodSyncCounter++;
@@ -504,25 +434,8 @@ public class GameEngine : IHostedService, IDisposable
                 }
 
                 _previousFoodIds = currentFoodIds;
-            },
-            () =>
-            {
-                projectilesDtos = new object[aliveProjectiles.Count];
-                for (int i = 0; i < aliveProjectiles.Count; i++)
-                {
-                    var p = aliveProjectiles[i];
-                    projectilesDtos[i] = new
-                    {
-                        id = p.Id,
-                        x = p.X,
-                        y = p.Y,
-                        ownerId = p.OwnerId
-                    };
-                }
             }
         );
-
-        var projectiles = projectilesDtos;
 
         var humanPlayers = alivePlayers.Where(p => !p.IsAI && p.OwnerId == null).ToList();
         if (humanPlayers.Any() && !_loggedFirstBroadcast)
@@ -547,7 +460,6 @@ public class GameEngine : IHostedService, IDisposable
             {
                 players,
                 food = fullFood,
-                projectiles,
                 tick = _gameState.CurrentTick,
                 resetType,
                 resetAtScore,
@@ -561,7 +473,6 @@ public class GameEngine : IHostedService, IDisposable
                 players,
                 addedFood,
                 removedFoodIds,
-                projectiles,
                 tick = _gameState.CurrentTick,
                 resetType,
                 resetAtScore,
@@ -589,7 +500,6 @@ public class GameEngine : IHostedService, IDisposable
                     botId,
                     foodIds = perception.FoodIds,
                     playerIds = perception.PlayerIds,
-                    projectileIds = perception.ProjectileIds,
                     largestPlayerId = perception.LargestPlayerId,
                     foodRadius = perception.FoodRadius,
                     playerRadius = perception.PlayerRadius
@@ -716,11 +626,6 @@ public class GameEngine : IHostedService, IDisposable
         foreach (var player in _playerRepository.GetAlive().ToList())
         {
             player.IsAlive = false;
-        }
-        foreach (var proj in _projectileRepository.GetAlive().ToList())
-        {
-            proj.IsAlive = false;
-            _projectileRepository.Remove(proj.Id);
         }
         foreach (var food in _foodRepository.GetAll().ToList())
         {

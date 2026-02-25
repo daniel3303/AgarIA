@@ -2,12 +2,9 @@
 const Input = (() => {
     let mouseX = 0;
     let mouseY = 0;
-    let mouseDown = false;
     let lastSendTime = 0;
-    let lastShootTime = 0;
     let currentCamera = null;
     const SEND_INTERVAL = 1000 / 15; // Throttle to ~15 sends/sec
-    const SHOOT_INTERVAL = 100; // 10 shots/sec when holding mouse
 
     // Initialize input listeners on canvas
     function init(canvas) {
@@ -16,13 +13,6 @@ const Input = (() => {
             mouseX = e.clientX;
             mouseY = e.clientY;
         });
-
-        // Hold mouse to auto-shoot at 10x/sec
-        canvas.addEventListener("mousedown", (e) => {
-            if (e.target !== canvas) return;
-            mouseDown = true;
-        });
-        window.addEventListener("mouseup", () => { mouseDown = false; });
 
         // Space key triggers cell split
         window.addEventListener("keydown", (e) => {
@@ -59,12 +49,6 @@ const Input = (() => {
         const worldY = camera.y + (mouseY - window.innerHeight / 2) / camera.zoom;
 
         Network.move(worldX, worldY);
-
-        // Auto-shoot while mouse is held
-        if (mouseDown && now - lastShootTime >= SHOOT_INTERVAL) {
-            lastShootTime = now;
-            Network.shoot(worldX, worldY);
-        }
     }
 
     return { init, update };

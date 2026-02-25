@@ -102,13 +102,6 @@ const Network = (() => {
         }
     }
 
-    // Shoot projectile toward screen position
-    function shoot(screenX, screenY) {
-        if (connection && connection.state === signalR.HubConnectionState.Connected) {
-            connection.invoke("Shoot", screenX, screenY);
-        }
-    }
-
     // Join as spectator (no player created)
     function spectate() {
         return connection.invoke("Spectate");
@@ -155,5 +148,5 @@ const Network = (() => {
         }
     }
 
-    return { init, join, move, respawn, split, shoot, spectate, reset, setResetAtScore, setMaxSpeed, setAutoResetSeconds, enableBotView, disableBotView };
+    return { init, join, move, respawn, split, spectate, reset, setResetAtScore, setMaxSpeed, setAutoResetSeconds, enableBotView, disableBotView };
 })();

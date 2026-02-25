@@ -5,7 +5,6 @@ namespace AgarIA.Core.Game;
 public record BotPerception(
     List<int> FoodIds,
     List<string> PlayerIds,
-    List<int> ProjectileIds,
     string LargestPlayerId,
     double FoodRadius,
     double PlayerRadius);
