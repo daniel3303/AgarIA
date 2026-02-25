@@ -76,6 +76,7 @@ In spectate mode you can observe the AI bots competing and evolving in real time
 
 - **WASD / Arrow keys** — Pan the camera
 - **Mouse wheel** — Zoom in/out
+- **Countdown timer HUD** — Shows time remaining (MaxTime reset) or score threshold (MaxScore reset)
 - **Reset at score** — Automatically reset the game when any player reaches a score threshold (forces new generations)
 - **Max Speed** — Run the simulation without tick delay for faster evolution
 ## Admin Dashboard
@@ -92,12 +93,12 @@ Each AI bot is controlled by a feedforward neural network with configurable hidd
 
 - **Easy** `(E)` — default: 1×64 hidden neurons
 - **Medium** `(M)` — default: 1×128 hidden neurons
-- **Hard** `(H)` — default: 1×256 hidden neurons
+- **Hard** `(H)` — default: 2×128 hidden neurons
 
 ```
 Easy:   161 inputs → [64] hidden (tanh) → 6 outputs
 Medium: 161 inputs → [128] hidden (tanh) → 6 outputs
-Hard:   161 inputs → [256] hidden (tanh) → 6 outputs
+Hard:   161 inputs → [128, 128] hidden (tanh) → 6 outputs
 ```
 
 The hidden layer architecture for each tier is configurable from the admin Settings page (e.g. "128,64" for two hidden layers of 128 and 64 neurons). Changing a tier's architecture deletes its genome file and resets training.
@@ -122,14 +123,14 @@ The hidden layer architecture for each tier is configurable from the admin Setti
 
 ### Genetic Algorithm
 
-Each tier has its own independent genetic algorithm with a pool of **40 genomes**:
+Each tier has its own independent genetic algorithm with a pool of **64 genomes**:
 
 - **Selection**: Tournament selection (pick 12 random, keep the fittest)
 - **Elitism**: Top 2 genomes are carried forward unmutated each generation, preserving the best solutions
 - **Block crossover**: 70% chance — picks 1–3 random crossover points and alternates contiguous segments from each parent, preserving neuron-level weight correlations (unlike uniform per-weight crossover which scrambles co-adapted weights)
-- **Adaptive mutation rate**: Scales inversely with genome size using Easy tier (10,374 weights) as reference — Easy ~10%, Medium ~5%, Hard ~2.5%, clamped to [1%, 15%]. Larger networks get gentler mutations to avoid destroying learned structure
+- **Adaptive mutation rate**: Scales inversely with genome size using Easy tier (10,374 weights) as reference — Easy ~10%, Medium ~5%, Hard ~2.7%, clamped to [1%, 15%]. Larger networks get gentler mutations to avoid destroying learned structure
 - **Self-adaptive sigma**: Each genome carries its own mutation strength (sigma). Children inherit the average of their parents' sigmas, then sigma itself mutates: `sigma *= exp(τ × gaussian())` where `τ = 1/√genomeSize`. Clamped to [0.005, 1.0]. This lets the population self-tune mutation intensity over generations
-- **Pool management**: When pool exceeds 40, the lowest-fitness genome is removed. Duplicate genomes are prevented — if a genome already exists in the pool, only the higher fitness is kept
+- **Pool management**: When pool exceeds 64, the lowest-fitness genome is removed. Duplicate genomes are prevented — if a genome already exists in the pool, only the higher fitness is kept
 - **Live checkpoints**: Every 30 seconds, all live bots report their current fitness to the pool. This ensures long-surviving dominant bots keep their genomes competitive without waiting until death
 
 #### Fitness Decay

@@ -8,7 +8,9 @@ public class GameSettings
 
     public double ResetAtScore { get; set; } = 5000;
 
-    public int AutoResetSeconds { get; set; } = 1200;
+    public int MinResetSeconds { get; set; } = 600;
+
+    public int MaxResetSeconds { get; set; } = 1200;
 
     public bool MaxSpeed { get; set; }
 
@@ -18,5 +20,5 @@ public class GameSettings
 
     public List<int> MediumHiddenLayers { get; set; } = [128];
 
-    public List<int> HardHiddenLayers { get; set; } = [256];
+    public List<int> HardHiddenLayers { get; set; } = [128, 128];
 }
