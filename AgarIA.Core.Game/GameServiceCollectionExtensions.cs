@@ -10,6 +10,7 @@ public static class GameServiceCollectionExtensions
         services.AutoWireServicesFrom<GameAssembly>();
         services.AddSingleton<SharedGrids>();
         services.AddSingleton<CollisionManager>();
+        services.AddSingleton<HeuristicPlayerController>();
         services.AddSingleton<GameEngine>();
         services.AddHostedService(sp => sp.GetRequiredService<GameEngine>());
         return services;

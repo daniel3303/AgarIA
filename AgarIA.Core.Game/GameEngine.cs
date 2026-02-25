@@ -16,6 +16,7 @@ public class GameEngine : IHostedService, IDisposable
     private readonly FoodRepository _foodRepository;
     private readonly CollisionManager _collisionManager;
     private readonly IAIController _aiController;
+    private readonly HeuristicPlayerController _heuristicController;
     private readonly IHubContext<GameHub, IGameHub> _hubContext;
     private readonly ILogger<GameEngine> _logger;
     private readonly GameSettings _gameSettings;
@@ -48,6 +49,7 @@ public class GameEngine : IHostedService, IDisposable
         FoodRepository foodRepository,
         CollisionManager collisionManager,
         IAIController aiController,
+        HeuristicPlayerController heuristicController,
         IHubContext<GameHub, IGameHub> hubContext,
         ILogger<GameEngine> logger,
         GameSettings gameSettings,
@@ -58,6 +60,7 @@ public class GameEngine : IHostedService, IDisposable
         _foodRepository = foodRepository;
         _collisionManager = collisionManager;
         _aiController = aiController;
+        _heuristicController = heuristicController;
         _hubContext = hubContext;
         _logger = logger;
         _gameSettings = gameSettings;
@@ -149,6 +152,7 @@ public class GameEngine : IHostedService, IDisposable
 
             ts = Stopwatch.GetTimestamp();
             var scoreTriggered = _aiController.Tick(_gameState.CurrentTick);
+            _heuristicController.Tick(_gameState.CurrentTick);
             _phaseTimesMs[5] += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
             ts = Stopwatch.GetTimestamp();
@@ -611,6 +615,7 @@ public class GameEngine : IHostedService, IDisposable
 
         // Decay all genome pools on game reset
         _aiController.OnGameReset();
+        _heuristicController.OnGameReset();
 
         // Notify all connected human players (alive or on death screen) that the game reset
         _hubContext.Clients.Group("humans").GameReset(new { message = "Game Reset" });
