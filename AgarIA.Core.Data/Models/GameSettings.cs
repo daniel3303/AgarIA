@@ -20,7 +20,7 @@ public class GameSettings
 
     public List<int> MediumHiddenLayers { get; set; } = [128];
 
-    public List<int> HardHiddenLayers { get; set; } = [128, 128];
+    public List<int> HardHiddenLayers { get; set; } = [256, 256];
 
     public PPOSettings PPO { get; set; } = new();
 }

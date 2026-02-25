@@ -4,7 +4,7 @@ namespace AgarIA.Core.AI;
 
 public class NeuralNetwork
 {
-    public const int InputSize = 151;
+    public const int InputSize = 170;
     private const int OutputSize = 3;
 
     public int[] HiddenSizes { get; }

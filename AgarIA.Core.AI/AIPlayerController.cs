@@ -296,7 +296,7 @@ public class AIPlayerController : IAIController
 
         // Phase 1: Build features (parallel)
         ts = Stopwatch.GetTimestamp();
-        const int featureSize = 151;
+        const int featureSize = 170;
         const int policySize = 3;
         var batchInputs = new float[bots.Count * featureSize];
         var botHasBrain = new bool[bots.Count];
@@ -598,7 +598,7 @@ public class AIPlayerController : IAIController
         Player secondCell, Player globalLargest,
         out List<int> outFoodIds, out List<string> outPlayerIds)
     {
-        var features = new float[151];
+        var features = new float[170];
         int idx = 0;
 
         var botX = (float)bot.X;
@@ -609,12 +609,21 @@ public class AIPlayerController : IAIController
         var botSpeed = (float)(GameConfig.BaseSpeed * bot.SpeedBoostMultiplier);
         if (botSpeed < 0.01f) botSpeed = (float)GameConfig.BaseSpeed;
 
+        // Self state (7 features: mass ratio, inv mass, can split, pos x/y, own vx/vy, speed boost)
         features[idx++] = largestMass > 0 ? (float)bot.Mass / largestMass : 1.0f;
         features[idx++] = 1.0f / (float)bot.Mass;
         features[idx++] = bot.Mass >= GameConfig.MinSplitMass ? 1.0f : 0.0f;
 
         features[idx++] = botX / mapSize;
         features[idx++] = botY / mapSize;
+
+        // Bot's own velocity
+        var (botVx, botVy) = _velocityTracker.GetVelocity(bot.Id);
+        features[idx++] = (float)botVx / botSpeed;
+        features[idx++] = (float)botVy / botSpeed;
+
+        // Speed boost active flag
+        features[idx++] = bot.SpeedBoostMultiplier > 1.0 ? 1.0f : 0.0f;
         if (secondCell != null)
         {
             features[idx++] = (float)secondCell.X / mapSize;
@@ -696,6 +705,7 @@ public class AIPlayerController : IAIController
             Array.Sort(topPlayers, 0, topPlayerCount, Comparer<(float dx, float dy, float distSq, float mass, string id)>.Create((a, b) => a.distSq.CompareTo(b.distSq)));
 
         outPlayerIds = new List<string>(topPlayerCount);
+        var eatThreshold = (float)(bot.Mass / GameConfig.EatSizeRatio);
         for (int i = 0; i < topPlayerK; i++)
         {
             if (i < topPlayerCount)
@@ -706,11 +716,14 @@ public class AIPlayerController : IAIController
                 var (vx, vy) = _velocityTracker.GetVelocity(topPlayers[i].id);
                 features[idx++] = (float)vx / botSpeed;
                 features[idx++] = (float)vy / botSpeed;
+                // Edibility: +1 = can eat, -1 = danger, 0 = neither
+                features[idx++] = (float)bot.Mass > topPlayers[i].mass * (float)GameConfig.EatSizeRatio ? 1.0f
+                    : topPlayers[i].mass > eatThreshold ? -1.0f : 0.0f;
                 outPlayerIds.Add(topPlayers[i].id);
             }
             else
             {
-                idx += 5;
+                idx += 6;
             }
         }
 
@@ -820,7 +833,7 @@ public class AIPlayerController : IAIController
             {
                 var trainer = GetTrainer(diff);
                 // Use a zero-state for terminal (the actual state doesn't matter much)
-                var terminalState = new float[151];
+                var terminalState = new float[170];
                 trainer.AddTerminal(terminalState, -5.0f, 0f, 0f);
             }
 
