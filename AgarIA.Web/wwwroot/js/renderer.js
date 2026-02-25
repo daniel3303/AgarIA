@@ -52,15 +52,67 @@ const Renderer = (() => {
         return `rgb(${r},${g},${b})`;
     }
 
+    // Build a map of attract points for engulfing effect: larger cells stretch toward smaller overlapping prey
+    function getAttractPoints(players) {
+        const attractMap = new Map();
+        if (!players) return attractMap;
+        for (let i = 0; i < players.length; i++) {
+            const a = players[i];
+            const ra = smoothRadius.get(a.id) ?? a.radius;
+            for (let j = i + 1; j < players.length; j++) {
+                const b = players[j];
+                const rb = smoothRadius.get(b.id) ?? b.radius;
+                if (ra > rb * 1.1) {
+                    const dx = b.x - a.x;
+                    const dy = b.y - a.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < ra) {
+                        const overlap = 1 - dist / ra;
+                        if (!attractMap.has(a.id)) attractMap.set(a.id, []);
+                        attractMap.get(a.id).push({ x: b.x, y: b.y, radius: rb, overlap });
+                    }
+                } else if (rb > ra * 1.1) {
+                    const dx = a.x - b.x;
+                    const dy = a.y - b.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < rb) {
+                        const overlap = 1 - dist / rb;
+                        if (!attractMap.has(b.id)) attractMap.set(b.id, []);
+                        attractMap.get(b.id).push({ x: a.x, y: a.y, radius: ra, overlap });
+                    }
+                }
+            }
+        }
+        return attractMap;
+    }
+
     // Draw an organic wobbly blob shape using sine-wave perimeter distortion
-    function drawBlob(ctx, x, y, radius, seed, time) {
+    // attractPoints: optional array of {x, y, radius, overlap} for engulfing stretch
+    function drawBlob(ctx, x, y, radius, seed, time, attractPoints) {
         const points = 20;
         const freq = 3;
         ctx.beginPath();
         for (let i = 0; i <= points; i++) {
             const angle = (i / points) * Math.PI * 2;
             const wobble = radius * 0.04 * Math.sin(i * freq + seed + time * 1.5);
-            const r = radius + wobble;
+            let r = radius + wobble;
+
+            // Engulfing stretch toward attract points
+            if (attractPoints) {
+                const dirX = Math.cos(angle);
+                const dirY = Math.sin(angle);
+                for (const ap of attractPoints) {
+                    const toX = ap.x - x;
+                    const toY = ap.y - y;
+                    const len = Math.sqrt(toX * toX + toY * toY) || 1;
+                    const dot = dirX * (toX / len) + dirY * (toY / len);
+                    if (dot > 0.5) {
+                        const alignment = (dot - 0.5) * 2; // 0..1
+                        r += radius * 0.15 * alignment * ap.overlap;
+                    }
+                }
+            }
+
             const px = x + Math.cos(angle) * r;
             const py = y + Math.sin(angle) * r;
             if (i === 0) {
@@ -69,7 +121,23 @@ const Renderer = (() => {
                 // Use quadratic curves for smoothness
                 const prevAngle = ((i - 0.5) / points) * Math.PI * 2;
                 const prevWobble = radius * 0.04 * Math.sin((i - 0.5) * freq + seed + time * 1.5);
-                const prevR = radius + prevWobble;
+                let prevR = radius + prevWobble;
+
+                if (attractPoints) {
+                    const dirX = Math.cos(prevAngle);
+                    const dirY = Math.sin(prevAngle);
+                    for (const ap of attractPoints) {
+                        const toX = ap.x - x;
+                        const toY = ap.y - y;
+                        const len = Math.sqrt(toX * toX + toY * toY) || 1;
+                        const dot = dirX * (toX / len) + dirY * (toY / len);
+                        if (dot > 0.5) {
+                            const alignment = (dot - 0.5) * 2;
+                            prevR += radius * 0.15 * alignment * ap.overlap;
+                        }
+                    }
+                }
+
                 const cpx = x + Math.cos(prevAngle) * prevR;
                 const cpy = y + Math.sin(prevAngle) * prevR;
                 ctx.quadraticCurveTo(cpx, cpy, px, py);
@@ -274,6 +342,7 @@ const Renderer = (() => {
     // Draw player blobs with organic shape, gradient fill, and username labels
     function drawPlayers(players, myId, time) {
         if (!players) return;
+        const attractMap = getAttractPoints(players);
         for (const p of players) {
             if (p.ghosted) ctx.globalAlpha = 0.1;
             const color = COLORS[p.colorIndex] || COLORS[0];
@@ -310,7 +379,8 @@ const Renderer = (() => {
             }
 
             // Soft drop shadow using blob shape
-            drawBlob(ctx, p.x, p.y, radius, seed, time);
+            const ap = attractMap.get(p.id) || null;
+            drawBlob(ctx, p.x, p.y, radius, seed, time, ap);
             ctx.shadowColor = hexToRgba(color, 0.35);
             ctx.shadowBlur = p.boosting ? 25 : 12;
             ctx.shadowOffsetX = 0;
@@ -329,7 +399,7 @@ const Renderer = (() => {
             ctx.shadowOffsetY = 0;
 
             // Thin outline using blob shape
-            drawBlob(ctx, p.x, p.y, radius, seed, time);
+            drawBlob(ctx, p.x, p.y, radius, seed, time, ap);
             ctx.strokeStyle = hexToRgba(color, 0.3);
             ctx.lineWidth = 2;
             ctx.stroke();
