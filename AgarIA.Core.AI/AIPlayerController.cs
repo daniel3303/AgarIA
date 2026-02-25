@@ -671,12 +671,12 @@ public class AIPlayerController : IAIController
         }
     }
 
-    private float ComputeFitness(string botId, float score, float playerMassEaten, float killerMassShare = 0)
+    private float ComputeFitness(string botId, float score, float crossTierMassEaten, float killerMassShare = 0)
     {
         var monopolyPenalty = 1.0f - killerMassShare;
 
-        // Reward aggression: player mass eaten counts double
-        var adjustedScore = score + playerMassEaten;
+        // Reward aggression: cross-tier player mass eaten counts double
+        var adjustedScore = score + crossTierMassEaten;
 
         // Time efficiency: divide by sqrt(alive ticks) to reward faster mass gain
         var aliveTicks = _spawnTick.TryGetValue(botId, out var spawn)
