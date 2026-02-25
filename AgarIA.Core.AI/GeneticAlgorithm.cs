@@ -12,7 +12,6 @@ public class GeneticAlgorithm
     private readonly string _savePath;
     private int _genomeSize;
     private DateTime _lastSave = DateTime.UtcNow;
-    private DateTime _lastDecay = DateTime.UtcNow;
     private int _elitesRemaining;
 
     private const int PoolCapacity = 64;
@@ -28,8 +27,7 @@ public class GeneticAlgorithm
     private const double CrossoverRate = 0.7;
     private const double ImmigrantRate = 0.10;
     private const int AntiTournamentSize = 4;
-    private const double FitnessDecayRate = 0.95;
-    private const int DecayIntervalSeconds = 30;
+    private const double ResetDecayRate = 0.90;
 
     public GeneticAlgorithm(ILogger<GeneticAlgorithm> logger, string savePath, int genomeSize)
     {
@@ -81,13 +79,6 @@ public class GeneticAlgorithm
 
         lock (_lock)
         {
-            if ((DateTime.UtcNow - _lastDecay).TotalSeconds >= DecayIntervalSeconds)
-            {
-                for (int i = 0; i < _pool.Count; i++)
-                    _pool[i] = (_pool[i].Genome, _pool[i].Fitness * FitnessDecayRate, _pool[i].Sigma);
-                _lastDecay = DateTime.UtcNow;
-            }
-
             var existingIdx = _pool.FindIndex(p => ReferenceEquals(p.Genome, genome));
             if (existingIdx >= 0)
             {
@@ -193,6 +184,15 @@ public class GeneticAlgorithm
         double u1 = 1.0 - _random.NextDouble();
         double u2 = 1.0 - _random.NextDouble();
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+    }
+
+    public void DecayPool()
+    {
+        lock (_lock)
+        {
+            for (int i = 0; i < _pool.Count; i++)
+                _pool[i] = (_pool[i].Genome, _pool[i].Fitness * ResetDecayRate, _pool[i].Sigma);
+        }
     }
 
     public void ResetPool(int newGenomeSize)

@@ -29,9 +29,7 @@ public class AIPlayerController : IAIController
     private readonly Dictionary<string, float> _sameTierMassEaten = new();
     private readonly PlayerVelocityTracker _velocityTracker = new();
     private long _currentTick;
-    private DateTime _lastCheckpoint = DateTime.UtcNow.AddSeconds(-15); // Offset from decay by 15s to avoid race
     private const int ShootCooldownTicks = 10;
-    private const int CheckpointIntervalSeconds = 30;
     private int _currentMaxAI = new Random().Next(10, 101);
     private readonly SharedGrids _grids;
     public ConcurrentDictionary<string, BotPerception> BotPerceptions { get; } = new();
@@ -146,7 +144,6 @@ public class AIPlayerController : IAIController
 
         var ts = Stopwatch.GetTimestamp();
         CleanupDeadBots(allBots);
-        CheckpointLiveBots(allBots);
         _aiCleanupMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
 
         ts = Stopwatch.GetTimestamp();
@@ -696,6 +693,13 @@ public class AIPlayerController : IAIController
         _logger.LogInformation("Randomized bot count to {Count}", _currentMaxAI);
     }
 
+    public void OnGameReset()
+    {
+        _gaEasy.DecayPool();
+        _gaMedium.DecayPool();
+        _gaHard.DecayPool();
+    }
+
     public void SaveGenomes()
     {
         _gaEasy.Save();
@@ -709,27 +713,6 @@ public class AIPlayerController : IAIController
         medium = _gaMedium.GetStats(),
         hard = _gaHard.GetStats()
     };
-
-    // Report fitness for live bots every 30s so long-surviving genomes stay relevant in the pool
-    private void CheckpointLiveBots(List<Player> allBots)
-    {
-        if ((DateTime.UtcNow - _lastCheckpoint).TotalSeconds < CheckpointIntervalSeconds)
-            return;
-        _lastCheckpoint = DateTime.UtcNow;
-
-        var liveBots = allBots.Where(p => p.IsAI && p.IsAlive && p.OwnerId == null).ToList();
-
-        foreach (var player in liveBots)
-        {
-            if (!_brains.TryGetValue(player.Id, out var brain)) continue;
-            var ga = _botDifficulty.TryGetValue(player.Id, out var diff) ? GetGA(diff) : _gaEasy;
-            var score = (float)player.Score;
-            var playerMassEaten = (float)player.MassEatenFromPlayers;
-            var sameTierEaten = _sameTierMassEaten.TryGetValue(player.Id, out var st) ? st : 0f;
-            var crossTierMassEaten = Math.Max(0, playerMassEaten - sameTierEaten);
-            ga.ReportFitness(brain.GetGenome(), ComputeFitness(player.Id, score, crossTierMassEaten));
-        }
-    }
 
     private void CleanupDeadBots(List<Player> allBots)
     {

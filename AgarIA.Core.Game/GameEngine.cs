@@ -707,6 +707,9 @@ public class GameEngine : IHostedService, IDisposable
             _logger.LogError(ex, "Error saving game history on reset");
         }
 
+        // Decay all genome pools on game reset
+        _aiController.OnGameReset();
+
         // Notify all connected human players (alive or on death screen) that the game reset
         _hubContext.Clients.Group("humans").GameReset(new { message = "Game Reset" });
 

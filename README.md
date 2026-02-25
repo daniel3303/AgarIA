@@ -132,11 +132,9 @@ Each tier has its own independent genetic algorithm with a pool of **64 genomes*
 - **Adaptive mutation rate**: Scales inversely with genome size using Easy tier (10,374 weights) as reference — Easy ~15%, Medium ~7.5%, Hard ~4.2%, clamped to [1%, 20%]. Larger networks get gentler mutations to avoid destroying learned structure
 - **Self-adaptive sigma**: Each genome carries its own mutation strength (sigma). Children inherit the average of their parents' sigmas, then sigma itself mutates: `sigma *= exp(τ × gaussian())` where `τ = 1/√genomeSize`. Clamped to [0.01, 1.0]. This lets the population self-tune mutation intensity over generations
 - **Pool management**: When pool exceeds 64, an inverse tournament (pick 4 random, evict the worst) removes a genome — this stochastic eviction preserves more mid-tier diversity than always removing the absolute worst. Fitness is always updated to the latest run, allowing natural turnover when previously dominant genomes underperform
-- **Live checkpoints**: Every 30 seconds, all live bots report their current fitness to the pool. This ensures long-surviving dominant bots keep their genomes competitive without waiting until death
-
 #### Fitness Decay
 
-Every 30 seconds, all existing pool entries are multiplied by **0.95**. This prevents old genomes that scored high when competition was weak from permanently dominating the pool. After 5 minutes a genome's stored fitness is at ~60%, after 15 minutes ~21%, forcing gradual turnover while keeping scores meaningful during gameplay. Live bot checkpoints counterbalance this decay — a bot that keeps growing will keep refreshing its genome's fitness in the pool.
+At the end of each game round (on reset), all pool entries are multiplied by **0.90**. This prevents old genomes that scored high when competition was weak from permanently dominating the pool, forcing gradual turnover across rounds. Fitness is only reported at death — there are no live checkpoints, so a bot's fitness reflects its complete lifetime performance.
 
 ### Fitness Function
 
