@@ -347,7 +347,75 @@
             };
         });
 
+        // Push overlapping cells apart so they don't visually clip
+        resolveOverlaps(interpolatedPlayers);
+
         return { ...gameState, players: interpolatedPlayers };
+    }
+
+    // Client-side overlap resolution: push cells apart to prevent visual clipping
+    function resolveOverlaps(players) {
+        const EAT_SIZE_RATIO = 1.15;
+        for (let i = 0; i < players.length; i++) {
+            const a = players[i];
+            const ra = a.radius;
+            for (let j = i + 1; j < players.length; j++) {
+                const b = players[j];
+                // Skip same-owner cells (split cells)
+                const ownerA = a.ownerId || a.id;
+                const ownerB = b.ownerId || b.id;
+                if (ownerA === ownerB) continue;
+
+                const rb = b.radius;
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const distSq = dx * dx + dy * dy;
+                const sumR = ra + rb;
+
+                if (distSq >= sumR * sumR) continue;
+
+                const dist = Math.sqrt(distSq);
+                if (dist < 0.01) continue;
+
+                const overlap = sumR - dist;
+                const nx = dx / dist;
+                const ny = dy / dist;
+
+                // Determine which is bigger by score (proxy for mass)
+                const massA = a.score || ra * ra;
+                const massB = b.score || rb * rb;
+                const big = massA > massB ? a : b;
+                const small = massA > massB ? b : a;
+                const bigMass = Math.max(massA, massB);
+                const smallMass = Math.min(massA, massB);
+                const canEat = bigMass > smallMass * EAT_SIZE_RATIO;
+
+                if (canEat) {
+                    // Allow 30% overlap for the "pressing in" look, push only the small cell
+                    const bigR = big === a ? ra : rb;
+                    const allowedOverlap = bigR * 0.3;
+                    const pushNeeded = overlap - allowedOverlap;
+                    if (pushNeeded > 0) {
+                        if (small === b) {
+                            b.x += nx * pushNeeded;
+                            b.y += ny * pushNeeded;
+                        } else {
+                            a.x -= nx * pushNeeded;
+                            a.y -= ny * pushNeeded;
+                        }
+                    }
+                } else {
+                    // Neither can eat: push both apart proportionally to mass
+                    const totalMass = massA + massB;
+                    const ratioA = massB / totalMass;
+                    const ratioB = massA / totalMass;
+                    a.x -= nx * overlap * ratioA;
+                    a.y -= ny * overlap * ratioA;
+                    b.x += nx * overlap * ratioB;
+                    b.y += ny * overlap * ratioB;
+                }
+            }
+        }
     }
 
     // Smoothly move camera to center on the player, zoom out as mass grows
