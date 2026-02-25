@@ -118,13 +118,15 @@ The hidden layer architecture for each tier is configurable from the admin Setti
 
 ### PPO Training
 
-Each tier has its own PPOTrainer that collects per-tick transitions and trains via Proximal Policy Optimization:
+Each tier has its own PPOTrainer that collects per-tick transitions and trains via Proximal Policy Optimization. Training uses **async double-buffering** — when a tier's buffer is full, the network is cloned and training runs in a background task while bots continue using the previous weights. When training completes, the new weights are atomically swapped in. This eliminates tick stalls during training passes.
 
 1. **Transition collection**: Every tick, each bot's state, sampled action, reward, value estimate, and log probability are stored in the tier's trajectory buffer
-2. **Training trigger**: When the buffer reaches `BufferSize` (default 2048) transitions, a PPO update runs
-3. **GAE-λ advantages**: Generalized Advantage Estimation with γ=0.99, λ=0.95 computes per-step advantages, then normalizes to zero mean / unit std
-4. **Clipped surrogate updates**: For K epochs (default 4), shuffle buffer into minibatches (default 256), compute ratio of new/old policy probability, apply clipped surrogate loss with ε=0.2
-5. **Adam optimizer**: Updates all network parameters (shared layers + policy head + value head + LogStd) with gradient clipping (max norm 0.5)
+2. **Training trigger**: When the buffer reaches `BufferSize` (default 2048) transitions and no training is in-flight, the network is cloned and a background training task launches
+3. **Double-buffered inference**: While training runs in the background, bots keep using the previous network weights for inference. New transitions accumulate for the next training pass
+4. **Weight swap**: When the background task completes, trained weights are copied back to the live network via `SetParameters`
+5. **GAE-λ advantages**: Generalized Advantage Estimation with γ=0.99, λ=0.95 computes per-step advantages, then normalizes to zero mean / unit std
+6. **Clipped surrogate updates**: For K epochs (default 4), shuffle buffer into minibatches (default 256), compute ratio of new/old policy probability, apply clipped surrogate loss with ε=0.2. PPO's importance sampling naturally handles the slight off-policy drift from transitions collected during background training
+7. **Adam optimizer**: Updates all network parameters (shared layers + policy head + value head + LogStd) with gradient clipping (max norm 0.5)
 
 #### Per-Tick Reward Function
 
