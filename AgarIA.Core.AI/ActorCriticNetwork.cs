@@ -58,7 +58,7 @@ public class ActorCriticNetwork
         _valueBiases = new float[ValueOutputSize];
 
         // Initialize log std to ln(0.5)
-        LogStd[0] = LogStd[1] = -0.693f;
+        LogStd[0] = LogStd[1] = -1.0f;
 
         // Xavier initialization
         InitializeWeights();
@@ -375,6 +375,10 @@ public class ActorCriticNetwork
         Array.Copy(p, idx, _valueWeights, 0, _valueWeights.Length); idx += _valueWeights.Length;
         Array.Copy(p, idx, _valueBiases, 0, _valueBiases.Length); idx += _valueBiases.Length;
         Array.Copy(p, idx, LogStd, 0, 2);
+
+        // Clamp LogStd to prevent runaway entropy
+        for (int i = 0; i < LogStd.Length; i++)
+            LogStd[i] = Math.Clamp(LogStd[i], -3.0f, 0.5f);
     }
 
     public ActorCriticNetwork Clone()

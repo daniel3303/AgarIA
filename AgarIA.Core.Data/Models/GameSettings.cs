@@ -34,7 +34,7 @@ public class PPOSettings
     public float Lambda { get; set; } = 0.95f;
     public float ClipEpsilon { get; set; } = 0.2f;
     public float LearningRate { get; set; } = 3e-4f;
-    public float EntropyCoeff { get; set; } = 0.01f;
+    public float EntropyCoeff { get; set; } = 0.001f;
     public float ValueCoeff { get; set; } = 0.5f;
     public float MaxGradNorm { get; set; } = 0.5f;
 }
