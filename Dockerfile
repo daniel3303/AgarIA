@@ -1,5 +1,6 @@
 # Stage 1: Build frontend
-FROM node:22-alpine AS frontend
+ARG BUILDPLATFORM
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
 WORKDIR /src/AgarIA.Web
 COPY AgarIA.Web/package.json ./
 RUN npm install
