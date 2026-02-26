@@ -21,6 +21,7 @@ from features import build_observations, compute_rewards
 from model import ActorCriticNetwork
 from normalizer import RunningNormalizer, RewardNormalizer
 from ppo import RolloutBuffer, ppo_update
+from config import STEPS_PER_BOT
 
 
 def main():
@@ -47,27 +48,34 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
     obs_normalizer = RunningNormalizer(config.OBS_SIZE)
     reward_normalizer = RewardNormalizer()
-    buffer = RolloutBuffer(config.BUFFER_SIZE, config.OBS_SIZE)
+
+    # Register bots first so we know num_bots for buffer
+    print(f"Registering {config.NUM_BOTS} bots...")
+    bot_ids = client.register_bots(config.NUM_BOTS)
+    num_bots = len(bot_ids)
+    print(f"Registered {num_bots} bots")
+
+    buffer = RolloutBuffer(num_bots, STEPS_PER_BOT, config.OBS_SIZE)
 
     # Load saved model if exists
     if os.path.exists(config.MODEL_PATH):
-        checkpoint = torch.load(config.MODEL_PATH, map_location=config.DEVICE, weights_only=False)
-        model.load_state_dict(checkpoint["model"])
-        optimizer.load_state_dict(checkpoint["optimizer"])
-        if "obs_normalizer" in checkpoint:
-            obs_normalizer.load_state_dict(checkpoint["obs_normalizer"])
-        if "reward_normalizer" in checkpoint:
-            reward_normalizer.load_state_dict(checkpoint["reward_normalizer"])
-        total_steps = checkpoint.get("total_steps", 0)
-        print(f"Loaded model from {config.MODEL_PATH} (step {total_steps})")
+        try:
+            checkpoint = torch.load(config.MODEL_PATH, map_location=config.DEVICE, weights_only=False)
+            model.load_state_dict(checkpoint["model"])
+            optimizer.load_state_dict(checkpoint["optimizer"])
+            if "obs_normalizer" in checkpoint:
+                obs_normalizer.load_state_dict(checkpoint["obs_normalizer"])
+            if "reward_normalizer" in checkpoint:
+                reward_normalizer.load_state_dict(checkpoint["reward_normalizer"])
+            total_steps = checkpoint.get("total_steps", 0)
+            print(f"Loaded model from {config.MODEL_PATH} (step {total_steps})")
+        except Exception as e:
+            print(f"WARNING: Failed to load checkpoint: {e}")
+            print(f"Delete {config.MODEL_PATH} if architecture changed. Starting fresh.")
+            total_steps = 0
     else:
         total_steps = 0
         print("Starting with fresh model")
-
-    # Register bots
-    print(f"Registering {config.NUM_BOTS} bots...")
-    bot_ids = client.register_bots(config.NUM_BOTS)
-    print(f"Registered {len(bot_ids)} bots")
 
     # Graceful shutdown
     running = True

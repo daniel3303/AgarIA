@@ -68,7 +68,7 @@ class RewardNormalizer:
 
     def normalize(self, rewards: np.ndarray) -> np.ndarray:
         std = max(np.sqrt(self.var + 1e-8), 1e-4)
-        return (rewards / std).astype(np.float32)
+        return np.clip(rewards / std, -10.0, 10.0).astype(np.float32)
 
     def state_dict(self) -> dict:
         return {"mean": self.mean, "var": self.var, "count": self.count}

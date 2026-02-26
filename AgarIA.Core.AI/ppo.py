@@ -17,17 +17,18 @@ from model import ActorCriticNetwork
 
 
 class RolloutBuffer:
-    """Stores trajectory data for PPO training."""
+    """Stores trajectory data for PPO training, structured per-bot."""
 
-    def __init__(self, buffer_size: int, obs_size: int):
-        self.buffer_size = buffer_size
-        self.obs = np.zeros((buffer_size, obs_size), dtype=np.float32)
-        self.actions = np.zeros((buffer_size, 3), dtype=np.float32)
-        self.log_probs = np.zeros(buffer_size, dtype=np.float32)
-        self.rewards = np.zeros(buffer_size, dtype=np.float32)
-        self.values = np.zeros(buffer_size, dtype=np.float32)
-        self.dones = np.zeros(buffer_size, dtype=np.float32)
-        self.ptr = 0
+    def __init__(self, num_bots: int, steps_per_bot: int, obs_size: int):
+        self.num_bots = num_bots
+        self.steps_per_bot = steps_per_bot
+        self.obs = np.zeros((num_bots, steps_per_bot, obs_size), dtype=np.float32)
+        self.actions = np.zeros((num_bots, steps_per_bot, 3), dtype=np.float32)
+        self.log_probs = np.zeros((num_bots, steps_per_bot), dtype=np.float32)
+        self.rewards = np.zeros((num_bots, steps_per_bot), dtype=np.float32)
+        self.values = np.zeros((num_bots, steps_per_bot), dtype=np.float32)
+        self.dones = np.zeros((num_bots, steps_per_bot), dtype=np.float32)
+        self.step_count = 0
 
     def add(
         self,
@@ -38,46 +39,56 @@ class RolloutBuffer:
         values: np.ndarray,
         dones: np.ndarray,
     ):
-        """Add a batch of transitions. Each arg is (num_bots,) or (num_bots, dim)."""
-        n = obs.shape[0]
-        if self.ptr + n > self.buffer_size:
-            n = self.buffer_size - self.ptr
-
-        end = self.ptr + n
-        self.obs[self.ptr : end] = obs[:n]
-        self.actions[self.ptr : end] = actions[:n]
-        self.log_probs[self.ptr : end] = log_probs[:n]
-        self.rewards[self.ptr : end] = rewards[:n]
-        self.values[self.ptr : end] = values[:n]
-        self.dones[self.ptr : end] = dones[:n]
-        self.ptr += n
+        """Add one tick of transitions. Each arg is (num_bots,) or (num_bots, dim)."""
+        if self.step_count >= self.steps_per_bot:
+            return
+        t = self.step_count
+        self.obs[:, t] = obs
+        self.actions[:, t] = actions
+        self.log_probs[:, t] = log_probs
+        self.rewards[:, t] = rewards
+        self.values[:, t] = values
+        self.dones[:, t] = dones
+        self.step_count += 1
 
     def ready(self) -> bool:
-        return self.ptr >= self.buffer_size
+        return self.step_count >= self.steps_per_bot
 
     def reset(self):
-        self.ptr = 0
+        self.step_count = 0
 
+    def get_training_data(self) -> dict:
+        """Compute GAE per bot, then flatten for minibatch sampling."""
+        T = self.step_count
+        all_advantages = np.zeros((self.num_bots, T), dtype=np.float32)
+        all_returns = np.zeros((self.num_bots, T), dtype=np.float32)
 
-def compute_gae(
-    rewards: np.ndarray,
-    values: np.ndarray,
-    dones: np.ndarray,
-    last_value: float = 0.0,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Compute GAE-lambda advantages and returns."""
-    n = len(rewards)
-    advantages = np.zeros(n, dtype=np.float32)
-    last_gae = 0.0
+        for b in range(self.num_bots):
+            rewards = self.rewards[b, :T]
+            values = self.values[b, :T]
+            dones = self.dones[b, :T]
 
-    for t in reversed(range(n)):
-        next_value = last_value if t == n - 1 else values[t + 1]
-        next_non_terminal = 1.0 - dones[t]
-        delta = rewards[t] + GAMMA * next_value * next_non_terminal - values[t]
-        advantages[t] = last_gae = delta + GAMMA * LAMBDA * next_non_terminal * last_gae
+            advantages = np.zeros(T, dtype=np.float32)
+            last_gae = 0.0
+            for t in reversed(range(T)):
+                next_value = 0.0 if t == T - 1 else values[t + 1]
+                next_non_terminal = 1.0 - dones[t]
+                delta = rewards[t] + GAMMA * next_value * next_non_terminal - values[t]
+                advantages[t] = last_gae = delta + GAMMA * LAMBDA * next_non_terminal * last_gae
 
-    returns = advantages + values
-    return advantages, returns
+            all_advantages[b] = advantages
+            all_returns[b] = advantages + values
+
+        # Flatten (num_bots, T, ...) -> (num_bots * T, ...)
+        n = self.num_bots * T
+        return {
+            "obs": self.obs[:, :T].reshape(n, -1),
+            "actions": self.actions[:, :T].reshape(n, -1),
+            "log_probs": self.log_probs[:, :T].reshape(n),
+            "values": self.values[:, :T].reshape(n),
+            "advantages": all_advantages.reshape(n),
+            "returns": all_returns.reshape(n),
+        }
 
 
 def ppo_update(
@@ -86,14 +97,14 @@ def ppo_update(
     buffer: RolloutBuffer,
 ) -> dict:
     """Run PPO update epochs on the buffer. Returns training stats."""
-    advantages, returns = compute_gae(buffer.rewards, buffer.values, buffer.dones)
+    data = buffer.get_training_data()
 
-    # Convert to tensors
-    obs_t = torch.from_numpy(buffer.obs[: buffer.ptr]).to(DEVICE)
-    actions_t = torch.from_numpy(buffer.actions[: buffer.ptr]).to(DEVICE)
-    old_log_probs_t = torch.from_numpy(buffer.log_probs[: buffer.ptr]).to(DEVICE)
-    advantages_t = torch.from_numpy(advantages[: buffer.ptr]).to(DEVICE)
-    returns_t = torch.from_numpy(returns[: buffer.ptr]).to(DEVICE)
+    obs_t = torch.from_numpy(data["obs"]).to(DEVICE)
+    actions_t = torch.from_numpy(data["actions"]).to(DEVICE)
+    old_log_probs_t = torch.from_numpy(data["log_probs"]).to(DEVICE)
+    old_values_t = torch.from_numpy(data["values"]).to(DEVICE)
+    advantages_t = torch.from_numpy(data["advantages"]).to(DEVICE)
+    returns_t = torch.from_numpy(data["returns"]).to(DEVICE)
 
     total_loss = 0.0
     total_policy_loss = 0.0
@@ -101,7 +112,7 @@ def ppo_update(
     total_entropy = 0.0
     num_updates = 0
 
-    n = buffer.ptr
+    n = obs_t.shape[0]
     for _ in range(EPOCHS):
         indices = np.random.permutation(n)
         for start in range(0, n, MINIBATCH_SIZE):
@@ -112,6 +123,7 @@ def ppo_update(
             mb_obs = obs_t[idx_t]
             mb_actions = actions_t[idx_t]
             mb_old_log_probs = old_log_probs_t[idx_t]
+            mb_old_values = old_values_t[idx_t]
             mb_advantages = advantages_t[idx_t]
             mb_returns = returns_t[idx_t]
 
@@ -128,8 +140,12 @@ def ppo_update(
             surr2 = torch.clamp(ratio, 1.0 - CLIP_EPSILON, 1.0 + CLIP_EPSILON) * mb_advantages
             policy_loss = -torch.min(surr1, surr2).mean()
 
-            # Value loss
-            value_loss = 0.5 * (values - mb_returns).pow(2).mean()
+            # Clipped value loss
+            value_clipped = mb_old_values + (values - mb_old_values).clamp(-CLIP_EPSILON, CLIP_EPSILON)
+            value_loss = 0.5 * torch.max(
+                (values - mb_returns).pow(2),
+                (value_clipped - mb_returns).pow(2),
+            ).mean()
 
             # Entropy bonus
             entropy_loss = -entropy.mean()
