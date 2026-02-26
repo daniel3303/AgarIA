@@ -122,7 +122,9 @@ def main():
                 dead_count = len(bot_ids) - len(alive_bots)
                 if dead_count > 0:
                     try:
+                        print(f"Re-registering {dead_count} dead bots...")
                         new_ids = client.register_bots(dead_count)
+                        print(f"Re-registered: {new_ids}")
                         # Replace dead bot IDs
                         new_bot_ids = []
                         new_idx = 0
@@ -134,10 +136,13 @@ def main():
                                 prev_masses[new_ids[new_idx]] = start_mass
                                 new_idx += 1
                         bot_ids = new_bot_ids
-                        # Refresh state
+                        # Refresh state and recompute lookups
                         state = client.get_state()
-                    except Exception:
-                        pass
+                        players_by_id = {p["id"]: p for p in state["players"]}
+                        alive_bots = [bid for bid in bot_ids if bid in players_by_id and players_by_id[bid]["isAlive"]]
+                    except Exception as e:
+                        print(f"Re-registration failed: {e}")
+                        continue
 
             # Build observations (include previous actions for recurrence)
             raw_obs = build_observations(state, bot_ids, prev_actions)
@@ -187,8 +192,9 @@ def main():
             if action_list:
                 client.post_actions(action_list)
 
-            # Store transitions and train (skip when inference-only)
-            if training_enabled:
+            # Store transitions and train (skip when inference-only or all dead)
+            alive_count_now = int((1 - dones).sum())
+            if training_enabled and alive_count_now > 0:
                 buffer.add(obs, actions_np, log_probs_np, norm_rewards, values_np, dones)
                 total_steps += len(bot_ids)
 
