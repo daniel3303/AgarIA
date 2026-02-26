@@ -18,6 +18,7 @@ public class Player
     public long SpeedBoostUntil { get; set; }
     public string OwnerId { get; set; }
     public long MergeAfterTick { get; set; }
+    public long SpawnProtectionUntilTick { get; set; }
     public string KilledById { get; set; }
     public double KillerMassShare { get; set; }
     public double MassEatenFromPlayers { get; set; }

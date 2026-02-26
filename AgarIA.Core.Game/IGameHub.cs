@@ -47,7 +47,8 @@ public class GameHub : Hub<IGameHub>
             Mass = GameConfig.StartMass,
             IsAI = false,
             IsAlive = true,
-            ColorIndex = _random.Next(6)
+            ColorIndex = _random.Next(6),
+            SpawnProtectionUntilTick = _gameState.CurrentTick + GameConfig.SpawnProtectionTicks
         };
 
         _playerRepository.Add(player);
@@ -173,6 +174,7 @@ public class GameHub : Hub<IGameHub>
             existing.IsAlive = true;
             existing.SpeedBoostUntil = 0;
             existing.SpeedBoostMultiplier = 1.0;
+            existing.SpawnProtectionUntilTick = _gameState.CurrentTick + GameConfig.SpawnProtectionTicks;
         }
     }
 

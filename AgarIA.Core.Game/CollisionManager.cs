@@ -65,6 +65,7 @@ public class CollisionManager
     {
         var players = _grids.PlayerGrid.AllItems;
 
+        var currentTick = _gameState.CurrentTick;
         var results = new List<(Player, Player)>[players.Count];
         Parallel.For(0, players.Count, () => new List<Player>(), (i, _, buffer) =>
         {
@@ -86,11 +87,13 @@ public class CollisionManager
                 {
                     if (player.Mass > other.Mass * GameConfig.EatSizeRatio)
                     {
+                        if (other.SpawnProtectionUntilTick > currentTick) continue;
                         local ??= new List<(Player, Player)>();
                         local.Add((player, other));
                     }
                     else if (other.Mass > player.Mass * GameConfig.EatSizeRatio)
                     {
+                        if (player.SpawnProtectionUntilTick > currentTick) continue;
                         local ??= new List<(Player, Player)>();
                         local.Add((other, player));
                     }

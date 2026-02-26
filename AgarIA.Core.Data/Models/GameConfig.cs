@@ -20,4 +20,5 @@ public static class GameConfig
     public const double SplitSpeed = 12.0;
     public const int MergeCooldownTicks = 200;
     public const int MaxSplitCells = 4;
+    public const int SpawnProtectionTicks = 40; // 2 seconds at 20 TPS
 }

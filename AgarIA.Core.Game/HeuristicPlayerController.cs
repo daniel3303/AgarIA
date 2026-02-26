@@ -9,6 +9,7 @@ public class HeuristicPlayerController
     private readonly FoodRepository _foodRepository;
     private readonly SharedGrids _grids;
     private readonly GameSettings _gameSettings;
+    private readonly GameState _gameState;
     private readonly Random _random = new();
     private readonly List<string> _playerIds = new();
 
@@ -19,12 +20,14 @@ public class HeuristicPlayerController
         PlayerRepository playerRepository,
         FoodRepository foodRepository,
         SharedGrids grids,
-        GameSettings gameSettings)
+        GameSettings gameSettings,
+        GameState gameState)
     {
         _playerRepository = playerRepository;
         _foodRepository = foodRepository;
         _grids = grids;
         _gameSettings = gameSettings;
+        _gameState = gameState;
     }
 
     public void Tick(long currentTick)
@@ -167,7 +170,8 @@ public class HeuristicPlayerController
             Mass = GameConfig.StartMass,
             IsAI = false,
             IsAlive = true,
-            ColorIndex = _random.Next(6)
+            ColorIndex = _random.Next(6),
+            SpawnProtectionUntilTick = _gameState.CurrentTick + GameConfig.SpawnProtectionTicks
         };
         player.TargetX = player.X;
         player.TargetY = player.Y;

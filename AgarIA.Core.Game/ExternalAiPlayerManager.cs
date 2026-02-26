@@ -60,7 +60,8 @@ public class ExternalAiPlayerManager : IExternalAiPlayerManager
                 Mass = GameConfig.StartMass,
                 IsAI = true,
                 IsAlive = true,
-                ColorIndex = _random.Next(6)
+                ColorIndex = _random.Next(6),
+                SpawnProtectionUntilTick = _gameState.CurrentTick + GameConfig.SpawnProtectionTicks
             };
             _playerRepository.Add(player);
             _externalBots[id] = DateTime.UtcNow;
