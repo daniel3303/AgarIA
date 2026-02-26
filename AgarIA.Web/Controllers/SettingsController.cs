@@ -38,12 +38,10 @@ public class SettingsController : AdminBaseController
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Update(
-        int minAIPlayers, int maxAIPlayers, double resetAtScore, int minResetSeconds, int maxResetSeconds,
+        double resetAtScore, int minResetSeconds, int maxResetSeconds,
         bool maxSpeed, ResetType resetType,
         bool heuristicEnabled, int heuristicPlayerCount, bool heuristicCanEatEachOther) {
 
-        _gameSettings.MinAIPlayers = Math.Max(0, minAIPlayers);
-        _gameSettings.MaxAIPlayers = Math.Max(_gameSettings.MinAIPlayers, maxAIPlayers);
         _gameSettings.ResetAtScore = Math.Max(100, resetAtScore);
         _gameSettings.MinResetSeconds = Math.Max(0, minResetSeconds);
         _gameSettings.MaxResetSeconds = Math.Max(_gameSettings.MinResetSeconds, maxResetSeconds);

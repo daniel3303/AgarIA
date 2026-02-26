@@ -2,10 +2,6 @@ namespace AgarIA.Core.Data.Models;
 
 public class GameSettings
 {
-    public int MinAIPlayers { get; set; } = 5;
-
-    public int MaxAIPlayers { get; set; } = 50;
-
     public double ResetAtScore { get; set; } = 5000;
 
     public int MinResetSeconds { get; set; } = 600;

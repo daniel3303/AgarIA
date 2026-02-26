@@ -715,7 +715,6 @@ public class GameEngine : IHostedService, IDisposable
             _logger.LogInformation("Next round reset in {Seconds}s ({Ticks} ticks)", seconds, _resetIntervalTicks);
         }
 
-        _aiController.RandomizePlayerCount();
         _aiController.SaveGenomes();
         _logger.LogInformation("Game reset performed");
     }

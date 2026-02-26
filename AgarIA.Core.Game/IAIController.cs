@@ -17,6 +17,5 @@ public interface IAIController
     void SetResetAtScore(double score);
     void SaveGenomes();
     void OnGameReset();
-    void RandomizePlayerCount();
     ConcurrentDictionary<string, BotPerception> BotPerceptions { get; }
 }

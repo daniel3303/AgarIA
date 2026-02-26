@@ -12,8 +12,7 @@ public static class AdminSettingsService
         ["ResetAtScore"] = (s, v) => { if (double.TryParse(v, out var d)) s.ResetAtScore = d; },
         ["MinResetSeconds"] = (s, v) => { if (int.TryParse(v, out var i)) s.MinResetSeconds = i; },
         ["MaxResetSeconds"] = (s, v) => { if (int.TryParse(v, out var i)) s.MaxResetSeconds = i; },
-        ["MinAIPlayers"] = (s, v) => { if (int.TryParse(v, out var i)) s.MinAIPlayers = i; },
-        ["MaxAIPlayers"] = (s, v) => { if (int.TryParse(v, out var i)) s.MaxAIPlayers = i; },
+
         ["MaxSpeed"] = (s, v) => { if (bool.TryParse(v, out var b)) s.MaxSpeed = b; },
         ["HeuristicEnabled"] = (s, v) => { if (bool.TryParse(v, out var b)) s.HeuristicEnabled = b; },
         ["HeuristicPlayerCount"] = (s, v) => { if (int.TryParse(v, out var i)) s.HeuristicPlayerCount = i; },
@@ -39,8 +38,7 @@ public static class AdminSettingsService
             ["ResetAtScore"] = settings.ResetAtScore.ToString(),
             ["MinResetSeconds"] = settings.MinResetSeconds.ToString(),
             ["MaxResetSeconds"] = settings.MaxResetSeconds.ToString(),
-            ["MinAIPlayers"] = settings.MinAIPlayers.ToString(),
-            ["MaxAIPlayers"] = settings.MaxAIPlayers.ToString(),
+
             ["MaxSpeed"] = settings.MaxSpeed.ToString(),
             ["HeuristicEnabled"] = settings.HeuristicEnabled.ToString(),
             ["HeuristicPlayerCount"] = settings.HeuristicPlayerCount.ToString(),
