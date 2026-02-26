@@ -667,7 +667,7 @@ public class GameEngine : IHostedService, IDisposable
             _gameTimer?.Change(0, 1000 / (GameConfig.TickRate * multiplier));
         }
 
-        _logger.LogInformation("Speed multiplier set to {Multiplier}x ({Tps} TPS)", multiplier, GameConfig.TickRate * multiplier);
+        _logger.LogInformation("Speed multiplier set to {Multiplier}x (game seconds per real second)", multiplier);
     }
 
     private void PerformReset()

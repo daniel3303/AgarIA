@@ -49,7 +49,7 @@ public class DashboardController : AdminBaseController
             TopScore = alivePlayers.Any() ? alivePlayers.Max(p => p.Score) : 0,
             Spectators = _gameState.Spectators.Count,
             TicksPerSecond = tps,
-            SpeedMultiplier = tps / 20.0,
+            SpeedMultiplier = _gameSettings.MaxSpeed ? Math.Round(tps / (double)GameConfig.TickRate, 1) : _gameSettings.SpeedMultiplier,
             MaxSpeed = _gameSettings.MaxSpeed,
             RecentRounds = await _db.GameRounds
                 .OrderByDescending(r => r.EndedAt)
@@ -97,7 +97,7 @@ public class DashboardController : AdminBaseController
             TopScore = alivePlayers.Any() ? alivePlayers.Max(p => p.Score) : 0,
             Spectators = _gameState.Spectators.Count,
             TicksPerSecond = tps,
-            SpeedMultiplier = Math.Round(tps / 20.0, 1),
+            SpeedMultiplier = _gameSettings.MaxSpeed ? Math.Round(tps / (double)GameConfig.TickRate, 1) : _gameSettings.SpeedMultiplier,
             MaxSpeed = _gameSettings.MaxSpeed,
             WinRates = new {
                 Ai = new { Wins = winCounts["ai"], Pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["ai"] / totalRounds, 1) : 0 },
