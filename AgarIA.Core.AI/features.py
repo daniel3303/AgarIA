@@ -145,6 +145,9 @@ def compute_rewards(
     players_by_id = {p["id"]: p for p in curr_state["players"]}
     new_masses = {}
 
+    # Small survival bonus per tick for staying alive
+    survival_bonus = 0.01
+
     for i, bot_id in enumerate(bot_ids):
         player = players_by_id.get(bot_id)
         if player is None or not player["isAlive"]:
@@ -156,7 +159,7 @@ def compute_rewards(
 
         curr_mass = player["mass"]
         prev_mass = prev_masses.get(bot_id, start_mass)
-        rewards[i] = (curr_mass - prev_mass) / start_mass
+        rewards[i] = (curr_mass - prev_mass) / start_mass + survival_bonus
         new_masses[bot_id] = curr_mass
 
     return rewards, new_masses
