@@ -57,17 +57,16 @@ const Renderer = (() => {
         return `rgb(${r},${g},${b})`;
     }
 
-    // Build a map of attract points for engulfing effect: larger cells stretch toward smaller nearby prey
-    function getAttractPoints(players) {
-        const attractMap = new Map();
-        if (!players) return attractMap;
+    // Build absorb pairs: prey ID → info about the eater pulling it in
+    function getAbsorbPairs(players) {
+        const absorbMap = new Map();
+        if (!players) return absorbMap;
         for (let i = 0; i < players.length; i++) {
             const a = players[i];
             const ra = smoothRadius.get(a.id) ?? a.radius;
             for (let j = i + 1; j < players.length; j++) {
                 const b = players[j];
                 const rb = smoothRadius.get(b.id) ?? b.radius;
-                // Determine which is larger
                 let big, bigR, small, smallR;
                 if (ra > rb * 1.1) {
                     big = a; bigR = ra; small = b; smallR = rb;
@@ -79,60 +78,88 @@ const Renderer = (() => {
                 const dx = small.x - big.x;
                 const dy = small.y - big.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                // Trigger when edge-to-edge gap < 50% of bigger radius (starts early, ramps up)
                 const edgeGap = dist - bigR;
-                if (edgeGap < bigR * 0.5) {
-                    // proximity: 0 = just entering range, 1 = fully overlapping
-                    const proximity = Math.min(1, 1 - edgeGap / (bigR * 0.5));
-                    if (!attractMap.has(big.id)) attractMap.set(big.id, []);
-                    attractMap.get(big.id).push({ x: small.x, y: small.y, radius: smallR, proximity });
+                if (edgeGap < bigR * 0.6) {
+                    const proximity = Math.min(1, 1 - edgeGap / (bigR * 0.6));
+                    absorbMap.set(small.id, { eaterX: big.x, eaterY: big.y, eaterRadius: bigR, proximity });
                 }
             }
         }
-        return attractMap;
+        return absorbMap;
     }
 
-    // Compute engulfing radius extension for a perimeter point
-    function engulfStretch(angle, x, y, radius, attractPoints) {
-        if (!attractPoints) return 0;
-        let stretch = 0;
-        const dirX = Math.cos(angle);
-        const dirY = Math.sin(angle);
-        for (const ap of attractPoints) {
-            const toX = ap.x - x;
-            const toY = ap.y - y;
-            const len = Math.sqrt(toX * toX + toY * toY) || 1;
-            // How much this perimeter direction faces the prey
-            const dot = dirX * (toX / len) + dirY * (toY / len);
-            if (dot > 0.3) {
-                // Smooth ramp: wider angular coverage, stronger effect
-                const alignment = (dot - 0.3) / 0.7; // 0..1
-                // Up to 35% radius stretch, eased with squared proximity
-                stretch += radius * 0.35 * alignment * alignment * ap.proximity * ap.proximity;
+    // Build indent points: eater ID → array of prey info for membrane denting
+    function getIndentPoints(players) {
+        const indentMap = new Map();
+        if (!players) return indentMap;
+        for (let i = 0; i < players.length; i++) {
+            const a = players[i];
+            const ra = smoothRadius.get(a.id) ?? a.radius;
+            for (let j = i + 1; j < players.length; j++) {
+                const b = players[j];
+                const rb = smoothRadius.get(b.id) ?? b.radius;
+                let big, bigR, small, smallR;
+                if (ra > rb * 1.1) {
+                    big = a; bigR = ra; small = b; smallR = rb;
+                } else if (rb > ra * 1.1) {
+                    big = b; bigR = rb; small = a; smallR = ra;
+                } else {
+                    continue;
+                }
+                const dx = small.x - big.x;
+                const dy = small.y - big.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const edgeGap = dist - bigR;
+                if (edgeGap < bigR * 0.6) {
+                    const proximity = Math.min(1, 1 - edgeGap / (bigR * 0.6));
+                    if (!indentMap.has(big.id)) indentMap.set(big.id, []);
+                    indentMap.get(big.id).push({ x: small.x, y: small.y, radius: smallR, proximity });
+                }
             }
         }
-        return stretch;
+        return indentMap;
+    }
+
+    // Compute inward membrane dent for a perimeter point (negative = inward)
+    function absorbIndent(angle, x, y, radius, indentPoints) {
+        if (!indentPoints) return 0;
+        let indent = 0;
+        for (const ip of indentPoints) {
+            const toX = ip.x - x;
+            const toY = ip.y - y;
+            const len = Math.sqrt(toX * toX + toY * toY) || 1;
+            const preyAngle = Math.atan2(toY, toX);
+            // Angular difference
+            let angleDiff = angle - preyAngle;
+            angleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff)); // normalize to [-π, π]
+            // ~60° arc: cosine falloff within ±30° (π/6 radians)
+            const halfArc = Math.PI / 6;
+            if (Math.abs(angleDiff) < halfArc) {
+                const falloff = Math.cos((angleDiff / halfArc) * (Math.PI / 2)); // 1 at center, 0 at edge
+                indent -= radius * 0.15 * ip.proximity * ip.proximity * falloff;
+            }
+        }
+        return indent;
     }
 
     // Draw an organic wobbly blob shape using sine-wave perimeter distortion
-    // attractPoints: optional array of {x, y, radius, proximity} for engulfing stretch
-    function drawBlob(ctx, x, y, radius, seed, time, attractPoints) {
+    // indentPoints: optional array of {x, y, radius, proximity} for inward membrane dent
+    function drawBlob(ctx, x, y, radius, seed, time, indentPoints) {
         const points = 36;
         const freq = 3;
         ctx.beginPath();
         for (let i = 0; i <= points; i++) {
             const angle = (i / points) * Math.PI * 2;
             const wobble = radius * 0.04 * Math.sin(i * freq + seed + time * 1.5);
-            const r = radius + wobble + engulfStretch(angle, x, y, radius, attractPoints);
+            const r = radius + wobble + absorbIndent(angle, x, y, radius, indentPoints);
             const px = x + Math.cos(angle) * r;
             const py = y + Math.sin(angle) * r;
             if (i === 0) {
                 ctx.moveTo(px, py);
             } else {
-                // Use quadratic curves for smoothness
                 const prevAngle = ((i - 0.5) / points) * Math.PI * 2;
                 const prevWobble = radius * 0.04 * Math.sin((i - 0.5) * freq + seed + time * 1.5);
-                const prevR = radius + prevWobble + engulfStretch(prevAngle, x, y, radius, attractPoints);
+                const prevR = radius + prevWobble + absorbIndent(prevAngle, x, y, radius, indentPoints);
                 const cpx = x + Math.cos(prevAngle) * prevR;
                 const cpy = y + Math.sin(prevAngle) * prevR;
                 ctx.quadraticCurveTo(cpx, cpy, px, py);
@@ -312,12 +339,21 @@ const Renderer = (() => {
     // Draw player blobs with organic shape, gradient fill, and username labels
     function drawPlayers(players, myId, time) {
         if (!players) return;
-        const attractMap = getAttractPoints(players);
+        const absorbMap = getAbsorbPairs(players);
+        const indentMap = getIndentPoints(players);
         for (const p of players) {
             if (p.ghosted) ctx.globalAlpha = 0.1;
             const color = COLORS[p.colorIndex] || COLORS[0];
             const seed = idToSeed(p.id);
             const radius = smoothRadius.get(p.id) ?? p.radius;
+
+            // If this cell is being absorbed, lerp rendered position toward eater
+            let drawX = p.x, drawY = p.y;
+            const absorb = absorbMap.get(p.id);
+            if (absorb) {
+                drawX = p.x + (absorb.eaterX - p.x) * absorb.proximity * 0.3;
+                drawY = p.y + (absorb.eaterY - p.y) * absorb.proximity * 0.3;
+            }
 
             // Speed lines when boosting
             if (p.boosting) {
@@ -337,8 +373,8 @@ const Renderer = (() => {
                         ctx.strokeStyle = hexToRgba(color, 0.15);
                         ctx.lineWidth = 2;
                         for (let li = -1; li <= 1; li++) {
-                            const ox = p.x - ndx * radius * 1.2 + px * li * radius * 0.4;
-                            const oy = p.y - ndy * radius * 1.2 + py * li * radius * 0.4;
+                            const ox = drawX - ndx * radius * 1.2 + px * li * radius * 0.4;
+                            const oy = drawY - ndy * radius * 1.2 + py * li * radius * 0.4;
                             ctx.beginPath();
                             ctx.moveTo(ox, oy);
                             ctx.lineTo(ox - ndx * radius * 0.6, oy - ndy * radius * 0.6);
@@ -349,8 +385,8 @@ const Renderer = (() => {
             }
 
             // Soft drop shadow using blob shape
-            const ap = attractMap.get(p.id) || null;
-            drawBlob(ctx, p.x, p.y, radius, seed, time, ap);
+            const ip = indentMap.get(p.id) || null;
+            drawBlob(ctx, drawX, drawY, radius, seed, time, ip);
             ctx.shadowColor = hexToRgba(color, 0.35);
             ctx.shadowBlur = p.boosting ? 25 : 12;
             ctx.shadowOffsetX = 0;
@@ -358,8 +394,8 @@ const Renderer = (() => {
 
             // Radial gradient fill (3D sphere look)
             const grad = ctx.createRadialGradient(
-                p.x - radius * 0.25, p.y - radius * 0.25, radius * 0.1,
-                p.x, p.y, radius
+                drawX - radius * 0.25, drawY - radius * 0.25, radius * 0.1,
+                drawX, drawY, radius
             );
             grad.addColorStop(0, lightenColor(color, 0.3));
             grad.addColorStop(1, color);
@@ -369,7 +405,7 @@ const Renderer = (() => {
             ctx.shadowOffsetY = 0;
 
             // Thin outline using blob shape
-            drawBlob(ctx, p.x, p.y, radius, seed, time, ap);
+            drawBlob(ctx, drawX, drawY, radius, seed, time, ip);
             ctx.strokeStyle = hexToRgba(color, 0.3);
             ctx.lineWidth = 2;
             ctx.stroke();
@@ -381,9 +417,9 @@ const Renderer = (() => {
             ctx.textBaseline = "middle";
             ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
             ctx.lineWidth = 3;
-            ctx.strokeText(p.username, p.x, p.y);
+            ctx.strokeText(p.username, drawX, drawY);
             ctx.fillStyle = "#1a1a2e";
-            ctx.fillText(p.username, p.x, p.y);
+            ctx.fillText(p.username, drawX, drawY);
 
             // Bot view indicators (drawn at full alpha even if ghosted)
             if (p.ghosted) ctx.globalAlpha = 1;
@@ -391,12 +427,12 @@ const Renderer = (() => {
                 // Crown/star indicator above player
                 ctx.font = `${Math.max(16, radius * 0.5)}px sans-serif`;
                 ctx.textAlign = "center";
-                ctx.fillText("\u2B50", p.x, p.y - radius - 8);
+                ctx.fillText("\u2B50", drawX, drawY - radius - 8);
             }
             if (p.isSplitCell) {
                 // Chain/link indicator
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, radius + 4, 0, Math.PI * 2);
+                ctx.arc(drawX, drawY, radius + 4, 0, Math.PI * 2);
                 ctx.strokeStyle = "rgba(253, 203, 110, 0.8)";
                 ctx.lineWidth = 3;
                 ctx.setLineDash([6, 4]);

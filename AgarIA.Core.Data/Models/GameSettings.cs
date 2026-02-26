@@ -32,7 +32,7 @@ public class GameSettings
 
     public int HeuristicPlayerCount { get; set; } = 5;
 
-    public bool HeuristicCanEatEachOther { get; set; }
+    public bool HeuristicCanEatEachOther { get; set; } = true;
 
     public PPOSettings PPO { get; set; } = new();
 }
