@@ -2,19 +2,21 @@ namespace AgarIA.Core.AI;
 
 public class AdamOptimizer
 {
-    private readonly float _lr;
+    private readonly float _initialLr;
     private readonly float _beta1;
     private readonly float _beta2;
     private readonly float _epsilon;
     private readonly float _maxGradNorm;
+    private readonly int _decaySteps;
     private float[] _m;
     private float[] _v;
     private int _step;
 
     public AdamOptimizer(int paramCount, float lr = 3e-4f, float maxGradNorm = 0.5f,
-        float beta1 = 0.9f, float beta2 = 0.999f, float epsilon = 1e-8f)
+        float beta1 = 0.9f, float beta2 = 0.999f, float epsilon = 1e-8f, int decaySteps = 500_000)
     {
-        _lr = lr;
+        _initialLr = lr;
+        _decaySteps = decaySteps;
         _beta1 = beta1;
         _beta2 = beta2;
         _epsilon = epsilon;
@@ -36,6 +38,7 @@ public class AdamOptimizer
         _step++;
         float bc1 = 1f - MathF.Pow(_beta1, _step);
         float bc2 = 1f - MathF.Pow(_beta2, _step);
+        float lr = _initialLr * MathF.Max(0f, 1f - (float)_step / _decaySteps);
 
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -44,7 +47,7 @@ public class AdamOptimizer
             _v[i] = _beta2 * _v[i] + (1f - _beta2) * g * g;
             float mHat = _m[i] / bc1;
             float vHat = _v[i] / bc2;
-            parameters[i] -= _lr * mHat / (MathF.Sqrt(vHat) + _epsilon);
+            parameters[i] -= lr * mHat / (MathF.Sqrt(vHat) + _epsilon);
         }
     }
 

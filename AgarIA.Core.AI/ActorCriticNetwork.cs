@@ -4,7 +4,7 @@ namespace AgarIA.Core.AI;
 
 public class ActorCriticNetwork
 {
-    public const int InputSize = 170;
+    public const int InputSize = 218;
     public const int PolicyOutputSize = 3; // moveX mean, moveY mean, split logit
     public const int ValueOutputSize = 1;
 

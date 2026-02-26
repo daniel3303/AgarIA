@@ -13,14 +13,21 @@ public class PPOTrainer
 
     private readonly List<Transition> _buffer = new();
     private AdamOptimizer _optimizer;
+    private readonly RunningNormalizer _obsNormalizer;
+    private double _rewardM2;
+    private double _rewardMean;
+    private long _rewardCount;
     private DateTime _lastSaveTime = DateTime.MinValue;
 
     // Training stats
     private int _totalUpdates;
+    private int _totalTransitions;
     private float _avgReward;
     private float _lastPolicyLoss;
     private float _lastValueLoss;
     private float _lastEntropy;
+
+    public int TotalTransitions => _totalTransitions;
 
     private static readonly float Log2Pi = MathF.Log(2f * MathF.PI);
     private static readonly Random Rng = new();
@@ -35,6 +42,7 @@ public class PPOTrainer
         public float ValueEstimate;
         public float LogProb;
         public bool Done;
+        public string BotId;
     }
 
     public PPOTrainer(ILogger logger, string savePath, PPOSettings hp, int paramCount)
@@ -43,24 +51,39 @@ public class PPOTrainer
         _savePath = savePath;
         _hp = hp;
         _optimizer = new AdamOptimizer(paramCount, hp.LearningRate, hp.MaxGradNorm);
+        _obsNormalizer = new RunningNormalizer(ActorCriticNetwork.InputSize);
+    }
+
+    public float[] NormalizeObservation(float[] state)
+    {
+        return _obsNormalizer.Normalize(state);
     }
 
     public void AddTransition(float[] state, float moveX, float moveY, bool split,
-        float reward, float valueEstimate, float logProb)
+        float reward, float valueEstimate, float logProb, string botId)
     {
         lock (_lock)
         {
+            _obsNormalizer.Update(state);
+            // Track running reward statistics for normalization
+            _rewardCount++;
+            double rDelta = reward - _rewardMean;
+            _rewardMean += rDelta / _rewardCount;
+            _rewardM2 += rDelta * (reward - _rewardMean);
+
             _buffer.Add(new Transition
             {
-                State = state,
+                State = _obsNormalizer.Normalize(state),
                 MoveXAction = moveX,
                 MoveYAction = moveY,
                 SplitAction = split,
                 Reward = reward,
                 ValueEstimate = valueEstimate,
                 LogProb = logProb,
-                Done = false
+                Done = false,
+                BotId = botId
             });
+            _totalTransitions++;
 
             int maxBuffer = _hp.BufferSize * 4;
             if (_buffer.Count > maxBuffer)
@@ -68,19 +91,21 @@ public class PPOTrainer
         }
     }
 
-    public void AddTerminal(float[] state, float reward, float valueEstimate, float logProb)
+    public void AddTerminal(float[] state, float reward, float valueEstimate, float logProb, string botId)
     {
         lock (_lock)
         {
             _buffer.Add(new Transition
             {
-                State = state,
+                State = _obsNormalizer.Normalize(state),
                 MoveXAction = 0, MoveYAction = 0, SplitAction = false,
                 Reward = reward,
                 ValueEstimate = valueEstimate,
                 LogProb = logProb,
-                Done = true
+                Done = true,
+                BotId = botId
             });
+            _totalTransitions++;
 
             int maxBuffer = _hp.BufferSize * 4;
             if (_buffer.Count > maxBuffer)
@@ -106,33 +131,42 @@ public class PPOTrainer
 
         int n = data.Length;
 
-        // 1. Compute advantages using GAE-lambda
+        // Normalize rewards by running std
+        if (_rewardCount > 1)
+        {
+            float rewardStd = (float)Math.Sqrt(_rewardM2 / _rewardCount + 1e-8);
+            for (int i = 0; i < n; i++)
+                data[i].Reward /= rewardStd;
+        }
+
+        // 1. Compute advantages using GAE-lambda (respecting bot boundaries)
         var advantages = new float[n];
         var returns = new float[n];
-
-        // Bootstrap value for last state (0 if terminal)
-        float lastValue = data[n - 1].Done ? 0f : data[n - 1].ValueEstimate;
 
         float gae = 0;
         for (int t = n - 1; t >= 0; t--)
         {
-            float nextValue = (t == n - 1) ? lastValue : (data[t + 1].Done ? 0 : data[t + 1].ValueEstimate);
-            float delta = data[t].Reward + _hp.Gamma * nextValue * (data[t].Done ? 0 : 1) - data[t].ValueEstimate;
-            gae = delta + _hp.Gamma * _hp.Lambda * (data[t].Done ? 0 : 1) * gae;
+            bool isTerminal = data[t].Done;
+            // Treat bot boundary as terminal: if next transition is from a different bot, reset GAE
+            bool isBoundary = t < n - 1 && data[t + 1].BotId != data[t].BotId;
+
+            float nextValue;
+            if (t == n - 1 || isTerminal || isBoundary)
+                nextValue = 0f;
+            else
+                nextValue = data[t + 1].ValueEstimate;
+
+            if (isBoundary)
+                gae = 0;
+
+            float mask = isTerminal ? 0f : 1f;
+            float delta = data[t].Reward + _hp.Gamma * nextValue * mask - data[t].ValueEstimate;
+            gae = delta + _hp.Gamma * _hp.Lambda * mask * gae;
             advantages[t] = gae;
             returns[t] = gae + data[t].ValueEstimate;
         }
 
-        // 2. Normalize advantages
-        float advMean = 0, advVar = 0;
-        for (int i = 0; i < n; i++) advMean += advantages[i];
-        advMean /= n;
-        for (int i = 0; i < n; i++) advVar += (advantages[i] - advMean) * (advantages[i] - advMean);
-        advVar /= n;
-        float advStd = MathF.Sqrt(advVar + 1e-8f);
-        for (int i = 0; i < n; i++) advantages[i] = (advantages[i] - advMean) / advStd;
-
-        // 3. PPO epochs
+        // 2. PPO epochs (advantage normalization is done per-minibatch below)
         var indices = Enumerable.Range(0, n).ToArray();
         var parameters = network.GetParameters();
         float totalPolicyLoss = 0, totalValueLoss = 0, totalEntropy = 0;
@@ -146,6 +180,23 @@ public class PPOTrainer
             {
                 var grads = new float[parameters.Length];
                 float mbPolicyLoss = 0, mbValueLoss = 0, mbEntropy = 0;
+
+                // Per-minibatch advantage normalization
+                float mbAdvMean = 0;
+                for (int mb = 0; mb < _hp.MinibatchSize; mb++)
+                    mbAdvMean += advantages[indices[start + mb]];
+                mbAdvMean /= _hp.MinibatchSize;
+                float mbAdvVar = 0;
+                for (int mb = 0; mb < _hp.MinibatchSize; mb++)
+                {
+                    float diff = advantages[indices[start + mb]] - mbAdvMean;
+                    mbAdvVar += diff * diff;
+                }
+                mbAdvVar /= _hp.MinibatchSize;
+                float mbAdvStd = MathF.Sqrt(mbAdvVar + 1e-8f);
+                var mbAdvNorm = new float[_hp.MinibatchSize];
+                for (int mb = 0; mb < _hp.MinibatchSize; mb++)
+                    mbAdvNorm[mb] = (advantages[indices[start + mb]] - mbAdvMean) / mbAdvStd;
 
                 // Parallel minibatch: each thread accumulates into thread-local arrays
                 var logStd = network.LogStd;
@@ -166,7 +217,7 @@ public class PPOTrainer
                             trans.MoveXAction, trans.MoveYAction, trans.SplitAction);
 
                         float ratio = MathF.Exp(newLogProb - trans.LogProb);
-                        float adv = advantages[idx];
+                        float adv = mbAdvNorm[mb];
 
                         float surr1 = ratio * adv;
                         float surr2 = Math.Clamp(ratio, 1f - _hp.ClipEpsilon, 1f + _hp.ClipEpsilon) * adv;
@@ -345,7 +396,7 @@ public class PPOTrainer
         // Entropy gradient contribution: -entropyCoeff * d(entropy)/d(policy)
         // Only split logit affects entropy (Gaussian entropy only depends on logStd)
         float dEntropydP = -(MathF.Log(p + 1e-8f) + 1f - MathF.Log(1f - p + 1e-8f) - 1f); // = ln((1-p)/p)
-        dPolicy[2] += -_hp.EntropyCoeff * dEntropydP * dSigmoid;
+        dPolicy[2] += -EffectiveEntropyCoeff * dEntropydP * dSigmoid;
 
         return dPolicy;
     }
@@ -379,11 +430,15 @@ public class PPOTrainer
         grads[1] = dLogProb * (diffY * diffY / (stdY * stdY) - 1f);
 
         // Entropy gradient: d(entropy)/d(logStd) = 1 for each Gaussian dim
-        grads[0] += -_hp.EntropyCoeff * 1f;
-        grads[1] += -_hp.EntropyCoeff * 1f;
+        var ec = EffectiveEntropyCoeff;
+        grads[0] += -ec * 1f;
+        grads[1] += -ec * 1f;
 
         return grads;
     }
+
+    private float EffectiveEntropyCoeff =>
+        _hp.EntropyCoeff * MathF.Max(0.1f, 1.0f - _totalTransitions / 100_000f);
 
     private static float Sigmoid(float x) => 1f / (1f + MathF.Exp(-Math.Clamp(x, -20f, 20f)));
 
@@ -407,10 +462,12 @@ public class PPOTrainer
     public object GetStats() => new
     {
         totalUpdates = _totalUpdates,
+        totalTransitions = _totalTransitions,
         avgReward = _avgReward,
         policyLoss = _lastPolicyLoss,
         valueLoss = _lastValueLoss,
         entropy = _lastEntropy,
+        effectiveEntropyCoeff = EffectiveEntropyCoeff,
         bufferFill = _buffer.Count
     };
 
@@ -424,7 +481,9 @@ public class PPOTrainer
                 HiddenSizes = network.HiddenSizes,
                 OptimizerState = _optimizer.GetState(),
                 TotalUpdates = _totalUpdates,
-                AvgReward = _avgReward
+                TotalTransitions = _totalTransitions,
+                AvgReward = _avgReward,
+                NormalizerState = _obsNormalizer.GetState()
             };
             var json = JsonConvert.SerializeObject(state);
             File.WriteAllText(_savePath, json);
@@ -453,7 +512,10 @@ public class PPOTrainer
             network.SetParameters(state.NetworkParameters);
             if (state.OptimizerState != null)
                 _optimizer.SetState(state.OptimizerState);
+            if (state.NormalizerState != null)
+                _obsNormalizer.SetState(state.NormalizerState);
             _totalUpdates = state.TotalUpdates;
+            _totalTransitions = state.TotalTransitions;
             _avgReward = state.AvgReward;
 
             _logger.LogInformation("Loaded PPO policy from {Path}: {Updates} updates, avgReward={Reward:F3}",
@@ -474,6 +536,7 @@ public class PPOTrainer
             _buffer.Clear();
             _optimizer = new AdamOptimizer(newParamCount, _hp.LearningRate, _hp.MaxGradNorm);
             _totalUpdates = 0;
+            _totalTransitions = 0;
             _avgReward = 0;
             _lastPolicyLoss = 0;
             _lastValueLoss = 0;
@@ -489,7 +552,9 @@ public class PPOTrainer
         public int[] HiddenSizes { get; set; }
         public AdamOptimizer.AdamState OptimizerState { get; set; }
         public int TotalUpdates { get; set; }
+        public int TotalTransitions { get; set; }
         public float AvgReward { get; set; }
+        public RunningNormalizer.NormalizerState NormalizerState { get; set; }
     }
 
     private const int PolicyOutputSize = ActorCriticNetwork.PolicyOutputSize;

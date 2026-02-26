@@ -52,11 +52,11 @@ public class AIPlayerController : IAIController
     private ActorCriticNetwork? _trainCopyHard;
 
     // Per-tick reward tracking
-    private readonly Dictionary<string, int> _lastFoodEaten = new();
     private readonly Dictionary<string, double> _lastMass = new();
-    private readonly Dictionary<string, int> _lastPlayersKilled = new();
     // Per-bot RNG for action sampling
     private readonly Dictionary<string, Random> _botRng = new();
+    // Cache last feature vector per bot for terminal transitions
+    private readonly Dictionary<string, float[]> _lastFeatures = new();
 
     private static readonly string[] BotNames =
     {
@@ -285,9 +285,7 @@ public class AIPlayerController : IAIController
             _botDifficulty[id] = difficulty;
             _spawnTick[id] = _currentTick;
             _visitedCells[id] = new HashSet<int>();
-            _lastFoodEaten[id] = 0;
             _lastMass[id] = GameConfig.StartMass;
-            _lastPlayersKilled[id] = 0;
             _botRng[id] = new Random(_random.Next());
         }
     }
@@ -327,12 +325,14 @@ public class AIPlayerController : IAIController
 
         // Phase 1: Build features (parallel)
         ts = Stopwatch.GetTimestamp();
-        const int featureSize = 170;
+        const int featureSize = ActorCriticNetwork.InputSize;
         const int policySize = 3;
         var batchInputs = new float[bots.Count * featureSize];
         var botHasBrain = new bool[bots.Count];
         var perceptions = new BotPerception[bots.Count];
         var botFeatures = new float[bots.Count][];
+        var botNearbyFood = new List<FoodItem>[bots.Count];
+        var botNearbyPlayers = new List<Player>[bots.Count];
 
         var foodGrid = _grids.FoodGrid;
         var playerGrid = _grids.PlayerGrid;
@@ -349,6 +349,10 @@ public class AIPlayerController : IAIController
 
             if (!_botDifficulty.ContainsKey(bot.Id))
                 return buffers;
+
+            // Cache copies for heuristic action computation in Phase 3
+            botNearbyFood[i] = new List<FoodItem>(nearbyFood);
+            botNearbyPlayers[i] = new List<Player>(nearbyPlayers);
 
             largestSplitByOwner.TryGetValue(bot.Id, out var secondCell);
             var features = BuildFeatureVector(
@@ -382,6 +386,16 @@ public class AIPlayerController : IAIController
         }
 
         _aiFeatureMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+        // Normalize observations for inference using each tier's running normalizer
+        for (int i = 0; i < bots.Count; i++)
+        {
+            if (!botHasBrain[i]) continue;
+            var diff = _botDifficulty[bots[i].Id];
+            var trainer = GetTrainer(diff);
+            var normalized = trainer.NormalizeObservation(botFeatures[i]);
+            normalized.AsSpan().CopyTo(batchInputs.AsSpan(i * featureSize, featureSize));
+        }
 
         // Phase 2: Group by tier, batched forward through shared networks
         ts = Stopwatch.GetTimestamp();
@@ -438,24 +452,32 @@ public class AIPlayerController : IAIController
             var policy = new float[policySize];
             policyOutputs.AsSpan(i * policySize, policySize).CopyTo(policy);
 
-            // Sample actions with exploration noise
+            // Use heuristic demonstrations for the first 25k transitions per tier
+            var trainer = GetTrainer(diff);
             var rng = _botRng.TryGetValue(bot.Id, out var r) ? r : _random;
-            var (moveX, moveY, split) = PPOTrainer.SampleActions(policy, network.LogStd, rng);
+            float moveX, moveY;
+            bool split;
+            if (trainer.TotalTransitions < 25_000 && botNearbyFood[i] != null)
+            {
+                (moveX, moveY, split) = ComputeHeuristicAction(bot, botNearbyFood[i], botNearbyPlayers[i]);
+            }
+            else
+            {
+                (moveX, moveY, split) = PPOTrainer.SampleActions(policy, network.LogStd, rng);
+            }
 
             // Compute per-tick reward
-            float reward = ComputeTickReward(bot, diff);
+            float reward = ComputeTickReward(bot);
 
             // Compute log probability
             float logProb = PPOTrainer.ComputeLogProb(policy, network.LogStd, moveX, moveY, split);
 
             // Store transition
-            var trainer = GetTrainer(diff);
-            trainer.AddTransition(botFeatures[i], moveX, moveY, split, reward, valueEstimates[i], logProb);
+            trainer.AddTransition(botFeatures[i], moveX, moveY, split, reward, valueEstimates[i], logProb, bot.Id);
 
             // Update tracking for next tick
-            _lastFoodEaten[bot.Id] = bot.FoodEaten;
             _lastMass[bot.Id] = bot.Mass;
-            _lastPlayersKilled[bot.Id] = bot.PlayersKilled;
+            _lastFeatures[bot.Id] = botFeatures[i];
 
             // Decode movement: moveX/moveY are in [-1, 1] range (already tanh'd by sampling from mu=tanh(raw))
             var targetX = Math.Clamp((float)bot.X + moveX * 200f, 0f, (float)GameConfig.MapSize);
@@ -497,35 +519,19 @@ public class AIPlayerController : IAIController
         _aiSeqMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
     }
 
-    private float ComputeTickReward(Player bot, BotDifficulty diff)
+    private float ComputeTickReward(Player bot)
     {
-        float reward = 0;
+        double prevMass = _lastMass.TryGetValue(bot.Id, out var lm) ? lm : GameConfig.StartMass;
+        float reward = (float)((bot.Mass - prevMass) / GameConfig.StartMass);
 
-        // Food eaten this tick
-        int prevFood = _lastFoodEaten.TryGetValue(bot.Id, out var pf) ? pf : 0;
-        int foodDelta = bot.FoodEaten - prevFood;
-        reward += foodDelta * 1.0f;
-
-        // Mass from eating players — reward scales with mass gained (Easy: 0)
-        if (diff != BotDifficulty.Easy)
-        {
-            int prevKills = _lastPlayersKilled.TryGetValue(bot.Id, out var pk) ? pk : 0;
-            int killDelta = bot.PlayersKilled - prevKills;
-            if (killDelta > 0)
-            {
-                double lastMass = _lastMass.TryGetValue(bot.Id, out var lm) ? lm : GameConfig.StartMass;
-                reward += (float)(bot.Mass - lastMass);
-            }
-        }
-
-        // Exploration: new grid cell visited this tick
+        // Small exploration bonus for visiting new grid cells
         if (_visitedCells.TryGetValue(bot.Id, out var cells))
         {
             int cx = Math.Clamp((int)(bot.X / (GameConfig.MapSize / GridDivisions)), 0, GridDivisions - 1);
             int cy = Math.Clamp((int)(bot.Y / (GameConfig.MapSize / GridDivisions)), 0, GridDivisions - 1);
             int cellId = cy * GridDivisions + cx;
             if (!cells.Contains(cellId))
-                reward += 0.05f;
+                reward += 0.01f;
         }
 
         return reward;
@@ -630,7 +636,7 @@ public class AIPlayerController : IAIController
         Player secondCell, Player globalLargest,
         out List<int> outFoodIds, out List<string> outPlayerIds)
     {
-        var features = new float[170];
+        var features = new float[ActorCriticNetwork.InputSize];
         int idx = 0;
 
         var botX = (float)bot.X;
@@ -658,8 +664,8 @@ public class AIPlayerController : IAIController
         features[idx++] = bot.SpeedBoostMultiplier > 1.0 ? 1.0f : 0.0f;
         if (secondCell != null)
         {
-            features[idx++] = (float)secondCell.X / mapSize;
-            features[idx++] = (float)secondCell.Y / mapSize;
+            features[idx++] = ((float)secondCell.X - botX) / mapSize;
+            features[idx++] = ((float)secondCell.Y - botY) / mapSize;
         }
         else
         {
@@ -698,19 +704,21 @@ public class AIPlayerController : IAIController
         {
             if (i < topFoodCount)
             {
-                features[idx++] = topFood[i].dx / mapSize;
-                features[idx++] = topFood[i].dy / mapSize;
+                features[idx++] = topFood[i].dx / 800f;
+                features[idx++] = topFood[i].dy / 800f;
+                features[idx++] = MathF.Sqrt(topFood[i].distSq) / 800f;
                 outFoodIds.Add(topFood[i].id);
             }
             else
             {
-                idx += 2;
+                idx += 3;
             }
         }
 
         const int topPlayerK = 16;
-        var topPlayers = new (float dx, float dy, float distSq, float mass, string id)[topPlayerK];
+        var topPlayers = new (float dx, float dy, float score, float mass, string id)[topPlayerK];
         int topPlayerCount = 0;
+        var botMass = (float)bot.Mass;
 
         foreach (var p in nearbyPlayers)
         {
@@ -718,23 +726,26 @@ public class AIPlayerController : IAIController
 
             var dx = (float)p.X - botX;
             var dy = (float)p.Y - botY;
-            var distSq = dx * dx + dy * dy;
+            var dist = MathF.Sqrt(dx * dx + dy * dy);
+            // Threat-weighted: prioritize large nearby players (threats and opportunities)
+            float massRatio = botMass > 0 ? (float)p.Mass / botMass : 1f;
+            float score = massRatio / (dist + 1f);
 
             if (topPlayerCount < topPlayerK)
             {
-                topPlayers[topPlayerCount++] = (dx, dy, distSq, (float)p.Mass, p.Id);
+                topPlayers[topPlayerCount++] = (dx, dy, score, (float)p.Mass, p.Id);
                 if (topPlayerCount == topPlayerK)
-                    Array.Sort(topPlayers, (a, b) => a.distSq.CompareTo(b.distSq));
+                    Array.Sort(topPlayers, (a, b) => b.score.CompareTo(a.score));
             }
-            else if (distSq < topPlayers[topPlayerK - 1].distSq)
+            else if (score > topPlayers[topPlayerK - 1].score)
             {
-                topPlayers[topPlayerK - 1] = (dx, dy, distSq, (float)p.Mass, p.Id);
-                InsertSortedPlayers(topPlayers, topPlayerK);
+                topPlayers[topPlayerK - 1] = (dx, dy, score, (float)p.Mass, p.Id);
+                InsertSortedPlayersByScore(topPlayers, topPlayerK);
             }
         }
 
         if (topPlayerCount < topPlayerK)
-            Array.Sort(topPlayers, 0, topPlayerCount, Comparer<(float dx, float dy, float distSq, float mass, string id)>.Create((a, b) => a.distSq.CompareTo(b.distSq)));
+            Array.Sort(topPlayers, 0, topPlayerCount, Comparer<(float dx, float dy, float score, float mass, string id)>.Create((a, b) => b.score.CompareTo(a.score)));
 
         outPlayerIds = new List<string>(topPlayerCount);
         var eatThreshold = (float)(bot.Mass / GameConfig.EatSizeRatio);
@@ -742,8 +753,9 @@ public class AIPlayerController : IAIController
         {
             if (i < topPlayerCount)
             {
-                features[idx++] = topPlayers[i].dx / mapSize;
-                features[idx++] = topPlayers[i].dy / mapSize;
+                features[idx++] = topPlayers[i].dx / 1600f;
+                features[idx++] = topPlayers[i].dy / 1600f;
+                features[idx++] = MathF.Sqrt(topPlayers[i].dx * topPlayers[i].dx + topPlayers[i].dy * topPlayers[i].dy) / 1600f;
                 features[idx++] = largestMass > 0 ? topPlayers[i].mass / largestMass : 0.0f;
                 var (vx, vy) = _velocityTracker.GetVelocity(topPlayers[i].id);
                 features[idx++] = (float)vx / botSpeed;
@@ -755,11 +767,91 @@ public class AIPlayerController : IAIController
             }
             else
             {
-                idx += 6;
+                idx += 7;
             }
         }
 
         return features;
+    }
+
+    private static (float moveX, float moveY, bool split) ComputeHeuristicAction(
+        Player bot, List<FoodItem> nearbyFood, List<Player> nearbyPlayers)
+    {
+        // Flee from threats (bigger players within 400 range)
+        double fleeX = 0, fleeY = 0;
+        bool hasCloseThreat = false;
+
+        foreach (var other in nearbyPlayers)
+        {
+            if (other.Id == bot.Id || other.OwnerId == bot.Id) continue;
+            if (other.Mass > bot.Mass * GameConfig.EatSizeRatio)
+            {
+                var dx = other.X - bot.X;
+                var dy = other.Y - bot.Y;
+                var dist = Math.Max(1, Math.Sqrt(dx * dx + dy * dy));
+                if (dist < 400)
+                {
+                    hasCloseThreat = true;
+                    var weight = other.Mass / dist;
+                    fleeX -= dx / dist * weight;
+                    fleeY -= dy / dist * weight;
+                }
+            }
+        }
+
+        if (hasCloseThreat)
+        {
+            var fleeDist = Math.Sqrt(fleeX * fleeX + fleeY * fleeY);
+            if (fleeDist > 0)
+            {
+                var targetX = bot.X + fleeX / fleeDist * 400;
+                var targetY = bot.Y + fleeY / fleeDist * 400;
+                return (
+                    Math.Clamp((float)(targetX - bot.X) / 200f, -1f, 1f),
+                    Math.Clamp((float)(targetY - bot.Y) / 200f, -1f, 1f),
+                    false);
+            }
+        }
+
+        // Score food and prey, pick best target
+        double bestScore = 0;
+        double bestX = bot.X, bestY = bot.Y;
+
+        foreach (var food in nearbyFood)
+        {
+            var dx = food.X - bot.X;
+            var dy = food.Y - bot.Y;
+            var dist = Math.Max(1, Math.Sqrt(dx * dx + dy * dy));
+            var score = GameConfig.FoodMass / dist;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestX = food.X;
+                bestY = food.Y;
+            }
+        }
+
+        foreach (var other in nearbyPlayers)
+        {
+            if (other.Id == bot.Id || other.OwnerId == bot.Id) continue;
+            if (bot.Mass <= other.Mass * GameConfig.EatSizeRatio) continue;
+
+            var dx = other.X - bot.X;
+            var dy = other.Y - bot.Y;
+            var dist = Math.Max(1, Math.Sqrt(dx * dx + dy * dy));
+            var score = other.Mass / dist * 2;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestX = other.X;
+                bestY = other.Y;
+            }
+        }
+
+        return (
+            Math.Clamp((float)(bestX - bot.X) / 200f, -1f, 1f),
+            Math.Clamp((float)(bestY - bot.Y) / 200f, -1f, 1f),
+            false);
     }
 
     private static void InsertSortedFood((float dx, float dy, float distSq, int id)[] arr, int len)
@@ -772,11 +864,12 @@ public class AIPlayerController : IAIController
         }
     }
 
-    private static void InsertSortedPlayers((float dx, float dy, float distSq, float mass, string id)[] arr, int len)
+    private static void InsertSortedPlayersByScore((float dx, float dy, float score, float mass, string id)[] arr, int len)
     {
+        // Sort descending by score — bubble the new element upward
         for (int i = len - 1; i > 0; i--)
         {
-            if (arr[i].distSq < arr[i - 1].distSq)
+            if (arr[i].score > arr[i - 1].score)
                 (arr[i], arr[i - 1]) = (arr[i - 1], arr[i]);
             else break;
         }
@@ -865,18 +958,17 @@ public class AIPlayerController : IAIController
             {
                 var trainer = GetTrainer(diff);
                 // Use a zero-state for terminal (the actual state doesn't matter much)
-                var terminalState = new float[170];
+                var terminalState = _lastFeatures.TryGetValue(id, out var cached) ? cached : new float[ActorCriticNetwork.InputSize];
                 float deathPenalty = player != null ? -(float)player.Mass : -5.0f;
-                trainer.AddTerminal(terminalState, deathPenalty, 0f, 0f);
+                trainer.AddTerminal(terminalState, deathPenalty, 0f, 0f, id);
             }
 
             _botDifficulty.Remove(id);
             _spawnTick.Remove(id);
             _visitedCells.Remove(id);
-            _lastFoodEaten.Remove(id);
             _lastMass.Remove(id);
-            _lastPlayersKilled.Remove(id);
             _botRng.Remove(id);
+            _lastFeatures.Remove(id);
             _velocityTracker.Remove(id);
 
             if (splitCellsByOwner.TryGetValue(id, out var cells))
