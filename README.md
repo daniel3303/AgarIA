@@ -127,7 +127,8 @@ The project includes a password-protected admin panel at `/admin/` for monitorin
 │  GameEngine (20 TPS)  │ GET  /api/ai/state    │  PyTorch + PPO       │
 │  Heuristic bots (.NET)│ POST /api/ai/players  │  Builds own features │
 │  API bot lifecycle    │ POST /api/ai/actions   │  Batched inference   │
-│                       │ DEL  /api/ai/players   │  GPU training        │
+│  Training toggle      │ GET/POST /ai/training  │  GPU training        │
+│                       │ DEL  /api/ai/players   │                      │
 └──────────────────────┘                       └─────────────────────┘
 ```
 
@@ -147,6 +148,9 @@ Heuristic bots run inside .NET, providing baseline opponents. The server exposes
 | POST | `/api/ai/players` | Register bots: `{"count": N}` |
 | DELETE | `/api/ai/players` | Remove all API-managed bots |
 | POST | `/api/ai/actions` | Batch actions: `{"actions": [...]}` |
+| GET | `/api/ai/training` | Training mode status: `{"enabled": true}` |
+| POST | `/api/ai/training` | Toggle training: `{"enabled": false}` |
+| POST | `/api/ai/stats` | Report PPO training stats |
 
 External bots auto-timeout after 30 seconds without actions.
 
@@ -156,18 +160,18 @@ The Python process (`AgarIA.Core.AI/`) handles all AI training:
 
 1. Registers bots via REST API
 2. Polls game state each tick
-3. Builds 170-feature observation vectors
+3. Builds 330-feature observation vectors
 4. Runs batched inference through a PyTorch actor-critic network
 5. Posts actions back to the game server
 6. Collects rewards (mass deltas) and trains via PPO
 
-#### Observation Features (170)
+#### Observation Features (330)
 
 | Feature Group | Count | Description |
 |---------------|-------|-------------|
 | Self info | 10 | Mass ratio, inv mass, can-split, posX/Y, vx/vy, speed boost, split cell relX/relY |
-| Nearest food | 64 | 32 closest food (dx, dy) — sorted by distance |
-| Nearest players | 96 | 16 most relevant players (dx, dy, relative mass, vx, vy, edibility) — sorted by threat score |
+| Nearest food | 128 | 64 closest food (dx, dy) — sorted by distance |
+| Nearest players | 192 | 32 most relevant players (dx, dy, relative mass, vx, vy, edibility) — sorted by threat score |
 
 #### Action Space
 
@@ -178,18 +182,21 @@ The Python process (`AgarIA.Core.AI/`) handles all AI training:
 
 #### PPO Training
 
-- **Buffer**: Collects transitions until `BUFFER_SIZE` (default 2048), then trains
-- **GAE-λ advantages**: γ=0.99, λ=0.95
-- **Clipped surrogate**: ε=0.2, K=4 epochs, minibatch=256
+- **Buffer**: Per-bot rollout buffer (`STEPS_PER_BOT=64`), 50 bots = 3200 transitions per update
+- **GAE-λ advantages**: γ=0.99, λ=0.95, computed per-bot to avoid interleaving
+- **Clipped surrogate**: ε=0.2, K=4 epochs, minibatch=256, value function clipping
+- **Entropy coefficient**: 0.001
 - **Adam optimizer**: LR=3×10⁻⁴, gradient clipping at 0.5
 - **Normalization**: Running mean/variance for observations, running std for rewards
 - **Model saves**: Auto-saves to `ppo_model.pt` every 60 seconds
+- **Training toggle**: Training can be enabled/disabled at runtime via admin dashboard or REST API
 
 #### Per-Tick Reward
 
 | Component | Value | Description |
 |-----------|-------|-------------|
 | **Mass delta** | (currentMass − prevMass) / StartMass | Main reward signal |
+| **Survival bonus** | +0.01 per tick alive | Encourages staying alive |
 | **Death** | −player mass / StartMass | Terminal penalty |
 
 ## Tech Stack
