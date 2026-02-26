@@ -2,6 +2,7 @@
 
 import torch
 import numpy as np
+import config
 from config import (
     GAMMA,
     LAMBDA,
@@ -23,7 +24,7 @@ class RolloutBuffer:
         self.num_bots = num_bots
         self.steps_per_bot = steps_per_bot
         self.obs = np.zeros((num_bots, steps_per_bot, obs_size), dtype=np.float32)
-        self.actions = np.zeros((num_bots, steps_per_bot, 3), dtype=np.float32)
+        self.actions = np.zeros((num_bots, steps_per_bot, config.ACTION_SIZE), dtype=np.float32)
         self.log_probs = np.zeros((num_bots, steps_per_bot), dtype=np.float32)
         self.rewards = np.zeros((num_bots, steps_per_bot), dtype=np.float32)
         self.values = np.zeros((num_bots, steps_per_bot), dtype=np.float32)
