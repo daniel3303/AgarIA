@@ -16,6 +16,7 @@ public class AIPlayerController : IAIController
     private readonly ILogger<AIPlayerController> _logger;
     private readonly Random _random = new();
     private readonly PlayerVelocityTracker _velocityTracker = new();
+    private int _heuristicCounter;
     private long _currentTick;
     private int _currentMaxAI = new Random().Next(10, 101);
     private readonly SharedGrids _grids;
@@ -118,7 +119,7 @@ public class AIPlayerController : IAIController
             var player = new Player
             {
                 Id = id,
-                Username = BotNames[_random.Next(BotNames.Length)],
+                Username = $"Heuristic {++_heuristicCounter}",
                 X = _random.NextDouble() * GameConfig.MapSize,
                 Y = _random.NextDouble() * GameConfig.MapSize,
                 Mass = GameConfig.StartMass,
