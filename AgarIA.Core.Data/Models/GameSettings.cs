@@ -16,7 +16,7 @@ public class GameSettings
 
     public bool HeuristicEnabled { get; set; } = true;
 
-    public int HeuristicPlayerCount { get; set; } = 5;
+    public int HeuristicPlayerCount { get; set; } = 0;
 
     public bool HeuristicCanEatEachOther { get; set; } = true;
 }
