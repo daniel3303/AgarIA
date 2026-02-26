@@ -91,6 +91,8 @@ def main():
     prev_masses: dict[str, float] = {bid: start_mass for bid in bot_ids}
     last_save = time.time()
     train_count = 0
+    training_enabled = True
+    last_training_mode = True
 
     print("Training loop started\n")
 
@@ -98,6 +100,15 @@ def main():
         loop_start = time.time()
 
         try:
+            # Poll training mode
+            try:
+                training_enabled = client.get_training_mode()
+                if training_enabled != last_training_mode:
+                    print(f"{'Training' if training_enabled else 'Inference-only'} mode")
+                    last_training_mode = training_enabled
+            except Exception:
+                pass
+
             # Get state
             state = client.get_state()
 
@@ -174,22 +185,36 @@ def main():
             if action_list:
                 client.post_actions(action_list)
 
-            # Store transitions
-            buffer.add(obs, actions_np, log_probs_np, norm_rewards, values_np, dones)
-            total_steps += len(bot_ids)
+            # Store transitions and train (skip when inference-only)
+            if training_enabled:
+                buffer.add(obs, actions_np, log_probs_np, norm_rewards, values_np, dones)
+                total_steps += len(bot_ids)
 
-            # Train if buffer full
-            if buffer.ready():
-                stats = ppo_update(model, optimizer, buffer)
-                train_count += 1
-                avg_reward = rewards.mean()
-                alive_count = int((1 - dones).sum())
-                print(
-                    f"[Train {train_count}] step={total_steps} "
-                    f"loss={stats['loss']:.4f} policy={stats['policy_loss']:.4f} "
-                    f"value={stats['value_loss']:.4f} entropy={stats['entropy']:.4f} "
-                    f"reward={avg_reward:.4f} alive={alive_count}/{len(bot_ids)}"
-                )
+                # Train if buffer full
+                if buffer.ready():
+                    stats = ppo_update(model, optimizer, buffer)
+                    train_count += 1
+                    avg_reward = rewards.mean()
+                    alive_count = int((1 - dones).sum())
+                    print(
+                        f"[Train {train_count}] step={total_steps} "
+                        f"loss={stats['loss']:.4f} policy={stats['policy_loss']:.4f} "
+                        f"value={stats['value_loss']:.4f} entropy={stats['entropy']:.4f} "
+                        f"reward={avg_reward:.4f} alive={alive_count}/{len(bot_ids)}"
+                    )
+
+                    # Report stats to server
+                    try:
+                        client.post_stats({
+                            "totalUpdates": train_count,
+                            "totalSteps": total_steps,
+                            "avgReward": float(avg_reward),
+                            "policyLoss": float(stats['policy_loss']),
+                            "valueLoss": float(stats['value_loss']),
+                            "entropy": float(stats['entropy']),
+                        })
+                    except Exception:
+                        pass
 
             # Save periodically
             if time.time() - last_save > config.SAVE_INTERVAL:

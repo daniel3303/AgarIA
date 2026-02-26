@@ -12,6 +12,11 @@ public interface IExternalAiPlayerManager
     bool IsExternalBot(string playerId);
     GameStateSnapshot GetGameState();
     GameConfigSnapshot GetGameConfig();
+    bool TrainingEnabled { get; }
+    void SetTrainingMode(bool enabled);
+    TrainingStats LastTrainingStats { get; }
+    void ReportTrainingStats(TrainingStats stats);
+    int ConnectedBotCount { get; }
 }
 
 public record ExternalBotAction(string PlayerId, double TargetX, double TargetY, bool Split);
@@ -34,6 +39,14 @@ public record PlayerSnapshot(
     double Speed);
 
 public record FoodSnapshot(double X, double Y);
+
+public record TrainingStats(
+    int TotalUpdates,
+    long TotalSteps,
+    double AvgReward,
+    double PolicyLoss,
+    double ValueLoss,
+    double Entropy);
 
 public record GameConfigSnapshot(
     int MapSize,

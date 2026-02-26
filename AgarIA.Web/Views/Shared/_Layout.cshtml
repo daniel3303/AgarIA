@@ -77,6 +77,13 @@
                             </a>
                         </li>
                         <li>
+                            <a asp-controller="Training" asp-action="Index"
+                               class="text-sm @(ViewData["Menu"]?.ToString() == "Training" ? "active font-medium" : "font-normal")">
+                                <icon name="academic-cap" size="4" />
+                                Training
+                            </a>
+                        </li>
+                        <li>
                             <a asp-controller="Settings" asp-action="Index"
                                class="text-sm @(ViewData["Menu"]?.ToString() == "Settings" ? "active font-medium" : "font-normal")">
                                 <icon name="cog-6-tooth" size="4" />

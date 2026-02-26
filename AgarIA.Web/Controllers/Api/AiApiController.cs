@@ -55,7 +55,39 @@ public class AiApiController : ControllerBase
         _externalAiManager.SetActions(actions);
         return Ok(new { applied = actions.Count });
     }
+    [HttpGet("training")]
+    public IActionResult GetTrainingMode() {
+        return Ok(new { enabled = _externalAiManager.TrainingEnabled });
+    }
+
+    [HttpPost("training")]
+    public IActionResult SetTrainingMode([FromBody] TrainingModeRequest request) {
+        _externalAiManager.SetTrainingMode(request.Enabled);
+        return Ok(new { enabled = _externalAiManager.TrainingEnabled });
+    }
+
+    [HttpPost("stats")]
+    public IActionResult PostStats([FromBody] TrainingStatsRequest request) {
+        _externalAiManager.ReportTrainingStats(new TrainingStats(
+            request.TotalUpdates,
+            request.TotalSteps,
+            request.AvgReward,
+            request.PolicyLoss,
+            request.ValueLoss,
+            request.Entropy));
+        return Ok();
+    }
 }
+
+public record TrainingModeRequest(bool Enabled);
+
+public record TrainingStatsRequest(
+    int TotalUpdates,
+    long TotalSteps,
+    double AvgReward,
+    double PolicyLoss,
+    double ValueLoss,
+    double Entropy);
 
 public record RegisterPlayersRequest(int Count);
 

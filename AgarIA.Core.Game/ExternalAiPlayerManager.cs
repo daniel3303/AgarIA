@@ -21,6 +21,10 @@ public class ExternalAiPlayerManager : IExternalAiPlayerManager
 
     private const int TimeoutTicks = 30 * GameConfig.TickRate; // 30 seconds
 
+    public bool TrainingEnabled { get; private set; } = true;
+    public TrainingStats LastTrainingStats { get; private set; }
+    public int ConnectedBotCount => _externalBots.Count;
+
     private static readonly string[] BotNames =
     {
         "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel",
@@ -138,6 +142,15 @@ public class ExternalAiPlayerManager : IExternalAiPlayerManager
     }
 
     public bool IsExternalBot(string playerId) => _externalBots.ContainsKey(playerId);
+
+    public void SetTrainingMode(bool enabled) {
+        TrainingEnabled = enabled;
+        _logger.LogInformation("Training mode {Status}", enabled ? "enabled" : "disabled");
+    }
+
+    public void ReportTrainingStats(TrainingStats stats) {
+        LastTrainingStats = stats;
+    }
 
     public GameStateSnapshot GetGameState()
     {

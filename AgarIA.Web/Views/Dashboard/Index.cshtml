@@ -37,33 +37,6 @@
     </div>
 </div>
 
-<!-- PPO Training Stats -->
-<h3 class="text-lg font-bold mb-4">PPO Training</h3>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-    @foreach (var tier in new[] { "easy", "medium", "hard" }) {
-        var label = tier[0..1].ToUpper() + tier[1..];
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body p-4">
-                <h3 class="card-title text-base">@label</h3>
-                <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                    <span class="text-base-content/60">Updates</span>
-                    <span class="font-mono text-right" id="ppo-@tier-updates">—</span>
-                    <span class="text-base-content/60">Avg Reward</span>
-                    <span class="font-mono text-right" id="ppo-@tier-reward">—</span>
-                    <span class="text-base-content/60">Policy Loss</span>
-                    <span class="font-mono text-right" id="ppo-@tier-ploss">—</span>
-                    <span class="text-base-content/60">Value Loss</span>
-                    <span class="font-mono text-right" id="ppo-@tier-vloss">—</span>
-                    <span class="text-base-content/60">Entropy</span>
-                    <span class="font-mono text-right" id="ppo-@tier-entropy">—</span>
-                    <span class="text-base-content/60">Buffer</span>
-                    <span class="font-mono text-right" id="ppo-@tier-buffer">—</span>
-                </div>
-            </div>
-        </div>
-    }
-</div>
-
 <!-- Win rate cards for last 100 games -->
 <h3 class="text-lg font-bold mb-4">Win Rates (Last 100 Games)</h3>
 <div id="winrate-cards" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -138,12 +111,6 @@
                     document.getElementById('stat-food').textContent = d.foodCount;
                     document.getElementById('stat-score').textContent = d.topScore;
                     document.getElementById('stat-spectators').textContent = d.spectators;
-                    // Update PPO training stat cards
-                    if (d.ppoStats) {
-                        updatePpoCard('easy', d.ppoStats.easy);
-                        updatePpoCard('medium', d.ppoStats.medium);
-                        updatePpoCard('hard', d.ppoStats.hard);
-                    }
                     // Update win rate cards
                     if (d.winRates) {
                         updateWinRate('easy', d.winRates.easy);
@@ -154,18 +121,6 @@
                 } catch (e) {
                     // Silently ignore fetch errors
                 }
-            }
-
-            // Update a PPO training stat card for a given tier
-            function updatePpoCard(tier, data) {
-                if (!data) return;
-                var el = function(suffix) { return document.getElementById('ppo-' + tier + '-' + suffix); };
-                el('updates').textContent = data.totalUpdates || 0;
-                el('reward').textContent = (data.avgReward || 0).toFixed(3);
-                el('ploss').textContent = (data.policyLoss || 0).toFixed(4);
-                el('vloss').textContent = (data.valueLoss || 0).toFixed(4);
-                el('entropy').textContent = (data.entropy || 0).toFixed(3);
-                el('buffer').textContent = data.bufferFill || 0;
             }
 
             // Update a win rate stat card with wins count and percentage

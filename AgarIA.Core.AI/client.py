@@ -38,3 +38,15 @@ class GameClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    def get_training_mode(self) -> bool:
+        resp = self.session.get(f"{self.base_url}/api/ai/training")
+        resp.raise_for_status()
+        return resp.json()["enabled"]
+
+    def post_stats(self, stats: dict):
+        resp = self.session.post(
+            f"{self.base_url}/api/ai/stats",
+            json=stats,
+        )
+        resp.raise_for_status()

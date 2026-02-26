@@ -1,0 +1,94 @@
+<!-- Training mode toggle -->
+<div class="flex items-center gap-4 mb-6">
+    <span class="text-sm font-medium">Training Mode</span>
+    <input type="checkbox" id="training-toggle" class="toggle toggle-success" checked />
+    <span id="training-label" class="text-sm text-base-content/60">Enabled</span>
+</div>
+
+<!-- PPO Stats card -->
+<h3 class="text-lg font-bold mb-4">PPO Training Stats</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4">
+            <h3 class="card-title text-base">Model</h3>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <span class="text-base-content/60">Updates</span>
+                <span class="font-mono text-right" id="ppo-updates">—</span>
+                <span class="text-base-content/60">Total Steps</span>
+                <span class="font-mono text-right" id="ppo-steps">—</span>
+                <span class="text-base-content/60">Connected Bots</span>
+                <span class="font-mono text-right" id="ppo-bots">—</span>
+            </div>
+        </div>
+    </div>
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4">
+            <h3 class="card-title text-base">Metrics</h3>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <span class="text-base-content/60">Avg Reward</span>
+                <span class="font-mono text-right" id="ppo-reward">—</span>
+                <span class="text-base-content/60">Policy Loss</span>
+                <span class="font-mono text-right" id="ppo-ploss">—</span>
+                <span class="text-base-content/60">Value Loss</span>
+                <span class="font-mono text-right" id="ppo-vloss">—</span>
+                <span class="text-base-content/60">Entropy</span>
+                <span class="font-mono text-right" id="ppo-entropy">—</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Auto-refresh training stats and handle training mode toggle
+        (function () {
+            var statsUrl = '@Url.Action("Stats")';
+            var toggleUrl = '@Url.Action("Toggle")';
+            var toggle = document.getElementById('training-toggle');
+            var label = document.getElementById('training-label');
+
+            // Toggle training mode on switch change
+            toggle.addEventListener('change', function () {
+                fetch(toggleUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'enabled=' + toggle.checked
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    label.textContent = d.enabled ? 'Enabled' : 'Disabled (inference only)';
+                });
+            });
+
+            // Poll stats every 2 seconds
+            async function refreshStats() {
+                try {
+                    var res = await fetch(statsUrl);
+                    if (!res.ok) return;
+                    var d = await res.json();
+
+                    // Sync toggle state from server
+                    toggle.checked = d.trainingEnabled;
+                    label.textContent = d.trainingEnabled ? 'Enabled' : 'Disabled (inference only)';
+
+                    document.getElementById('ppo-bots').textContent = d.connectedBots;
+
+                    // Update PPO stats if available
+                    if (d.stats) {
+                        document.getElementById('ppo-updates').textContent = d.stats.totalUpdates;
+                        document.getElementById('ppo-steps').textContent = d.stats.totalSteps.toLocaleString();
+                        document.getElementById('ppo-reward').textContent = d.stats.avgReward.toFixed(4);
+                        document.getElementById('ppo-ploss').textContent = d.stats.policyLoss.toFixed(4);
+                        document.getElementById('ppo-vloss').textContent = d.stats.valueLoss.toFixed(4);
+                        document.getElementById('ppo-entropy').textContent = d.stats.entropy.toFixed(4);
+                    }
+                } catch (e) {
+                    // Silently ignore fetch errors
+                }
+            }
+
+            refreshStats();
+            setInterval(refreshStats, 2000);
+        })();
+    </script>
+}
