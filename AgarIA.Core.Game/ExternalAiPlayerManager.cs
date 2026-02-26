@@ -50,7 +50,7 @@ public class ExternalAiPlayerManager : IExternalAiPlayerManager
             var player = new Player
             {
                 Id = id,
-                Username = BotNames[_random.Next(BotNames.Length)],
+                Username = $"(AI) {BotNames[_random.Next(BotNames.Length)]}",
                 X = _random.NextDouble() * GameConfig.MapSize,
                 Y = _random.NextDouble() * GameConfig.MapSize,
                 Mass = GameConfig.StartMass,
