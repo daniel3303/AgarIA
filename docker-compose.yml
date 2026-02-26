@@ -2,16 +2,16 @@ services:
   game:
     build: .
     ports:
-      - "5274:5274"
+      - "8095:8095"
     volumes:
       - agaria-data:/app/data
 
   ai:
-    build: ./AgarIA.Core.AI/python-ai
+    build: ./AgarIA.Core.AI
     depends_on:
       - game
     environment:
-      - API_URL=http://game:5274
+      - API_URL=http://game:8095
     volumes:
       - ai-models:/app/models
     # For NVIDIA GPU: uncomment deploy section

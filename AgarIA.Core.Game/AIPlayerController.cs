@@ -1,12 +1,11 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using AgarIA.Core.Data.Models;
-using AgarIA.Core.Game;
 using AgarIA.Core.Repositories;
 using Equibles.Core.AutoWiring;
 using Microsoft.Extensions.Logging;
 
-namespace AgarIA.Core.AI;
+namespace AgarIA.Core.Game;
 
 [Service]
 public class AIPlayerController : IAIController

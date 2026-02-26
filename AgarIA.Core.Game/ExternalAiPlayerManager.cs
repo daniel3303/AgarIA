@@ -4,7 +4,7 @@ using AgarIA.Core.Repositories;
 using Equibles.Core.AutoWiring;
 using Microsoft.Extensions.Logging;
 
-namespace AgarIA.Core.AI;
+namespace AgarIA.Core.Game;
 
 [Service]
 public class ExternalAiPlayerManager : IExternalAiPlayerManager

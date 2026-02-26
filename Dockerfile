@@ -26,9 +26,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=build /app .
 RUN mkdir -p /app/data
-EXPOSE 5274
+EXPOSE 8095
 ENV DATA_DIR=/app/data
-ENV ASPNETCORE_URLS=http://+:5274
+ENV ASPNETCORE_URLS=http://+:8095
 ENV ASPNETCORE_ENVIRONMENT=Production
 ENV Logging__LogLevel__Default=Warning
 ENTRYPOINT ["dotnet", "AgarIA.Web.dll"]

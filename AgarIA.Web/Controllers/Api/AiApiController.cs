@@ -1,4 +1,4 @@
-using AgarIA.Core.AI;
+using AgarIA.Core.Game;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgarIA.Web.Controllers.Api;

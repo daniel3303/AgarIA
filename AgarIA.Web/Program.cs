@@ -1,4 +1,3 @@
-using AgarIA.Core.AI;
 using AgarIA.Core.Data;
 using AgarIA.Core.Data.Models;
 using AgarIA.Core.Game;
@@ -21,7 +20,6 @@ builder.Services.Configure<HostOptions>(opts => opts.ShutdownTimeout = TimeSpan.
 builder.Services.AddData();
 builder.Services.AddRepositories();
 builder.Services.AddGame();
-builder.Services.AddAI();
 builder.Services.AddSignalR();
 
 // Admin portal: EF Core + SQLite

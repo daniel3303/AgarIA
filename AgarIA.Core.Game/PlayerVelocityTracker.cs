@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using AgarIA.Core.Data.Models;
 
-namespace AgarIA.Core.AI;
+namespace AgarIA.Core.Game;
 
 public class PlayerVelocityTracker
 {

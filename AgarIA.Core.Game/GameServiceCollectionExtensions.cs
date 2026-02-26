@@ -13,6 +13,10 @@ public static class GameServiceCollectionExtensions
         services.AddSingleton<HeuristicPlayerController>();
         services.AddSingleton<GameEngine>();
         services.AddHostedService(sp => sp.GetRequiredService<GameEngine>());
+        services.AddSingleton<ExternalAiPlayerManager>();
+        services.AddSingleton<IExternalAiPlayerManager>(sp => sp.GetRequiredService<ExternalAiPlayerManager>());
+        services.AddSingleton<AIPlayerController>();
+        services.AddSingleton<IAIController>(sp => sp.GetRequiredService<AIPlayerController>());
         return services;
     }
 }

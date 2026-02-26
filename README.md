@@ -36,26 +36,26 @@ The server starts on a local port (shown in the terminal). Open the URL in your 
 ### Start AI Training (Optional)
 
 ```bash
-cd AgarIA.Core.AI/python-ai
+cd AgarIA.Core.AI
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python train.py
 ```
 
-The Python AI sidecar connects to the game server via REST API, registers bots, and trains them using PPO. See `AgarIA.Core.AI/python-ai/README.md` for details.
+The Python AI sidecar connects to the game server via REST API, registers bots, and trains them using PPO. See `AgarIA.Core.AI/README.md` for details.
 
 ### Docker
 
 Pull the pre-built image from Docker Hub:
 
 ```bash
-docker run -p 5274:5274 -v agaria-data:/app/data daniel3303/agaria:latest
+docker run -p 8095:8095 -v agaria-data:/app/data daniel3303/agaria:latest
 ```
 
 The volume mounts to `/app/data`, persisting the SQLite database (`admin.db`) across container restarts.
 
-Open `http://localhost:5274` in your browser.
+Open `http://localhost:8095` in your browser.
 
 ### Docker Compose (Game + AI Training)
 
@@ -66,7 +66,7 @@ docker compose up --build
 ```
 
 This starts two services:
-- **game** — .NET game server on port 5274
+- **game** — .NET game server on port 8095
 - **ai** — Python AI sidecar connecting to the game server, training via PPO
 
 The AI model is persisted in a Docker volume (`ai-models`). To enable NVIDIA GPU acceleration, uncomment the `deploy` section in `docker-compose.yml`.
@@ -152,7 +152,7 @@ External bots auto-timeout after 30 seconds without actions.
 
 ### Python AI Sidecar
 
-The Python process (`AgarIA.Core.AI/python-ai/`) handles all AI training:
+The Python process (`AgarIA.Core.AI/`) handles all AI training:
 
 1. Registers bots via REST API
 2. Polls game state each tick

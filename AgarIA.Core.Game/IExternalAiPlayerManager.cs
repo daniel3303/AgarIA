@@ -1,6 +1,6 @@
 using AgarIA.Core.Data.Models;
 
-namespace AgarIA.Core.AI;
+namespace AgarIA.Core.Game;
 
 public interface IExternalAiPlayerManager
 {

@@ -5,7 +5,7 @@ External AI training process for AgarIA using PyTorch + PPO.
 ## Setup
 
 ```bash
-cd AgarIA.Core.AI/python-ai
+cd AgarIA.Core.AI
 python -m venv venv
 source venv/bin/activate  # Linux/macOS
 pip install -r requirements.txt
@@ -29,7 +29,7 @@ Device is auto-detected at startup with logging. Priority: CUDA > MPS > CPU.
 
 2. Start the Python AI:
    ```bash
-   cd AgarIA.Core.AI/python-ai
+   cd AgarIA.Core.AI
    python train.py
    ```
 
@@ -44,8 +44,8 @@ docker compose up --build
 Or build the AI image standalone:
 
 ```bash
-docker build -t agaria-ai ./AgarIA.Core.AI/python-ai
-docker run --rm -e API_URL=http://host.docker.internal:5274 agaria-ai
+docker build -t agaria-ai ./AgarIA.Core.AI
+docker run --rm -e API_URL=http://host.docker.internal:8095 agaria-ai
 ```
 
 For NVIDIA GPU support, uncomment the `deploy` section in `docker-compose.yml`.
