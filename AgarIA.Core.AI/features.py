@@ -5,11 +5,16 @@ import numpy as np
 from config import OBS_SIZE
 
 TOP_FOOD_K = 64
-TOP_PLAYER_K = 32
+TOP_PLAYER_K = 64
 
 
-def build_observations(state: dict, bot_ids: list[str]) -> np.ndarray:
+def build_observations(
+    state: dict, bot_ids: list[str], prev_actions: np.ndarray = None
+) -> np.ndarray:
     """Build observation vectors for all bots from raw game state.
+
+    Args:
+        prev_actions: (num_bots, 3) previous actions [moveX, moveY, split], or None for zeros.
 
     Returns: (num_bots, OBS_SIZE) float32 array.
     """
@@ -23,7 +28,7 @@ def build_observations(state: dict, bot_ids: list[str]) -> np.ndarray:
         bot = players_by_id.get(bot_id)
         if bot is None or not bot["isAlive"]:
             continue
-        obs[i] = _build_single(bot, food_list, state["players"], map_size)
+        obs[i] = _build_single(bot, food_list, state["players"], map_size, prev_actions[i] if prev_actions is not None else None)
 
     return obs
 
@@ -33,6 +38,7 @@ def _build_single(
     food_list: list[dict],
     all_players: list[dict],
     map_size: int,
+    prev_action: np.ndarray = None,
 ) -> np.ndarray:
     features = np.zeros(OBS_SIZE, dtype=np.float32)
     idx = 0
@@ -63,6 +69,11 @@ def _build_single(
     # Second cell (not tracked for simplicity — zero)
     idx += 2  # dx, dy to second cell
 
+    # Previous action (3 features: moveX, moveY, split)
+    if prev_action is not None:
+        features[idx:idx + 3] = prev_action
+    idx += 3
+
     # Food: top 32 by distance (dx, dy only — no distance feature)
     food_dists = []
     for f in food_list:
@@ -82,8 +93,8 @@ def _build_single(
         else:
             idx += 2
 
-    # Players: top 16 by threat score (dx, dy, relative mass, vx, vy, edibility)
-    player_scores = []
+    # Players: top 64 by distance (dx, dy, relative mass, vx, vy, edibility)
+    player_dists = []
     eat_size_ratio = 1.15
 
     for p in all_players:
@@ -94,18 +105,16 @@ def _build_single(
 
         dx = p["x"] - bx
         dy = p["y"] - by
-        dist = math.sqrt(dx * dx + dy * dy)
-        mass_ratio = p["mass"] / bot_mass if bot_mass > 0 else 1.0
-        score = mass_ratio / (dist + 1.0)
-        player_scores.append((dx, dy, score, p["mass"], p))
+        dist_sq = dx * dx + dy * dy
+        player_dists.append((dx, dy, dist_sq, p["mass"], p))
 
-    player_scores.sort(key=lambda t: -t[2])
+    player_dists.sort(key=lambda t: t[2])
 
     eat_threshold = bot_mass / eat_size_ratio
 
     for j in range(TOP_PLAYER_K):
-        if j < len(player_scores):
-            dx, dy, _, pmass, p = player_scores[j]
+        if j < len(player_dists):
+            dx, dy, _, pmass, p = player_dists[j]
             features[idx] = dx / 1600.0
             idx += 1
             features[idx] = dy / 1600.0

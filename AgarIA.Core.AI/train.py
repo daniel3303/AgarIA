@@ -89,6 +89,7 @@ def main():
     signal.signal(signal.SIGTERM, on_signal)
 
     prev_masses: dict[str, float] = {bid: start_mass for bid in bot_ids}
+    prev_actions = np.zeros((num_bots, config.ACTION_SIZE), dtype=np.float32)
     last_save = time.time()
     train_count = 0
     training_enabled = True
@@ -138,8 +139,8 @@ def main():
                     except Exception:
                         pass
 
-            # Build observations
-            raw_obs = build_observations(state, bot_ids)
+            # Build observations (include previous actions for recurrence)
+            raw_obs = build_observations(state, bot_ids, prev_actions)
             obs_normalizer.update(raw_obs)
             obs = obs_normalizer.normalize(raw_obs)
 
@@ -165,6 +166,7 @@ def main():
             actions_np = actions.cpu().numpy()
             log_probs_np = log_probs.cpu().numpy()
             values_np = values.cpu().numpy()
+            prev_actions = actions_np.copy()
 
             # Send actions to game
             action_list = []
