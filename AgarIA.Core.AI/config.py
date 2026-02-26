@@ -51,7 +51,7 @@ MINIBATCH_SIZE = 256
 EPOCHS = 4
 
 # Observation
-OBS_SIZE = 525  # 10 self + 3 prev action + 128 food (64 * 2) + 384 players (64 * 6)
+OBS_SIZE = 825  # 10 self + 3 prev action + 512 food (256 * 2) + 300 players (50 * 6)
 ACTION_SIZE = 3  # moveX, moveY, split
 
 # Training loop

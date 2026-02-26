@@ -4,8 +4,8 @@ import math
 import numpy as np
 from config import OBS_SIZE
 
-TOP_FOOD_K = 64
-TOP_PLAYER_K = 64
+TOP_FOOD_K = 256
+TOP_PLAYER_K = 50
 
 
 def build_observations(
