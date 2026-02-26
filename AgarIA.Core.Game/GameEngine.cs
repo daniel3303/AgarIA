@@ -380,6 +380,9 @@ public class GameEngine : IHostedService, IDisposable
             }
 
             keeper.Mass += merged.Mass;
+            keeper.FoodEaten += merged.FoodEaten;
+            keeper.PlayersKilled += merged.PlayersKilled;
+            keeper.MassEatenFromPlayers += merged.MassEatenFromPlayers;
             merged.IsAlive = false;
             _playerRepository.Remove(merged.Id);
         }
