@@ -19,14 +19,14 @@ class ActorCriticNetwork(nn.Module):
             prev = hs
         self.shared = nn.Sequential(*layers)
 
-        # Policy head: moveX mean, moveY mean, split logit
+        # Policy head: targetX mean, targetY mean (absolute 0-1)
         self.policy_head = nn.Linear(prev, ACTION_SIZE)
 
         # Value head
         self.value_head = nn.Linear(prev, 1)
 
         # Learnable log-std for continuous actions
-        self.log_std = nn.Parameter(torch.full((2,), -1.0))
+        self.log_std = nn.Parameter(torch.full((ACTION_SIZE,), -1.0))
 
         self._init_weights()
 
@@ -41,7 +41,7 @@ class ActorCriticNetwork(nn.Module):
         nn.init.zeros_(self.value_head.bias)
 
     def forward(self, obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Returns (policy_output [B, 3], value [B, 1])."""
+        """Returns (policy_output [B, 2], value [B, 1])."""
         hidden = self.shared(obs)
         policy = self.policy_head(hidden)
         value = self.value_head(hidden)
@@ -50,27 +50,17 @@ class ActorCriticNetwork(nn.Module):
     def get_action(self, obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Sample actions and return (actions, log_probs, values).
 
-        actions: [B, 3] — moveX, moveY (continuous), split (0/1)
+        actions: [B, 2] — targetX, targetY (absolute 0-1 via sigmoid)
         """
         policy, value = self.forward(obs)
 
-        # Continuous: moveX, moveY
-        move_mean = torch.tanh(policy[:, :2])
+        mean = torch.sigmoid(policy)
         std = torch.exp(self.log_std.clamp(-3.0, 0.5))
-        move_dist = torch.distributions.Normal(move_mean, std)
-        move_sample = move_dist.sample()
-        move_log_prob = move_dist.log_prob(move_sample).sum(dim=-1)
+        dist = torch.distributions.Normal(mean, std)
+        sample = dist.sample().clamp(0.0, 1.0)
+        log_probs = dist.log_prob(sample).sum(dim=-1)
 
-        # Discrete: split
-        split_logit = policy[:, 2]
-        split_dist = torch.distributions.Bernoulli(logits=split_logit)
-        split_sample = split_dist.sample()
-        split_log_prob = split_dist.log_prob(split_sample)
-
-        actions = torch.cat([move_sample, split_sample.unsqueeze(-1)], dim=-1)
-        log_probs = move_log_prob + split_log_prob
-
-        return actions, log_probs, value.squeeze(-1)
+        return sample, log_probs, value.squeeze(-1)
 
     def evaluate_actions(
         self, obs: torch.Tensor, actions: torch.Tensor
@@ -78,20 +68,10 @@ class ActorCriticNetwork(nn.Module):
         """Evaluate log_prob, value, entropy for given obs and actions."""
         policy, value = self.forward(obs)
 
-        # Continuous
-        move_mean = torch.tanh(policy[:, :2])
+        mean = torch.sigmoid(policy)
         std = torch.exp(self.log_std.clamp(-3.0, 0.5))
-        move_dist = torch.distributions.Normal(move_mean, std)
-        move_log_prob = move_dist.log_prob(actions[:, :2]).sum(dim=-1)
-        move_entropy = move_dist.entropy().sum(dim=-1)
-
-        # Discrete
-        split_logit = policy[:, 2]
-        split_dist = torch.distributions.Bernoulli(logits=split_logit)
-        split_log_prob = split_dist.log_prob(actions[:, 2])
-        split_entropy = split_dist.entropy()
-
-        log_probs = move_log_prob + split_log_prob
-        entropy = move_entropy + split_entropy
+        dist = torch.distributions.Normal(mean, std)
+        log_probs = dist.log_prob(actions).sum(dim=-1)
+        entropy = dist.entropy().sum(dim=-1)
 
         return log_probs, value.squeeze(-1), entropy

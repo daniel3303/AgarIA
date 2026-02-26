@@ -173,20 +173,19 @@ def main():
             values_np = values.cpu().numpy()
             prev_actions = actions_np.copy()
 
-            # Send actions to game
+            # Send actions to game (absolute 0-1 mapped to map coordinates)
+            map_size = game_config["mapSize"]
             action_list = []
             for i, bid in enumerate(bot_ids):
                 if bid not in players_by_id or not players_by_id[bid]["isAlive"]:
                     continue
-                p = players_by_id[bid]
-                target_x = max(0, min(p["x"] + float(actions_np[i, 0]) * 200, game_config["mapSize"]))
-                target_y = max(0, min(p["y"] + float(actions_np[i, 1]) * 200, game_config["mapSize"]))
-                split = bool(actions_np[i, 2] > 0.5)
+                target_x = float(actions_np[i, 0]) * map_size
+                target_y = float(actions_np[i, 1]) * map_size
                 action_list.append({
                     "playerId": bid,
                     "targetX": target_x,
                     "targetY": target_y,
-                    "split": split,
+                    "split": False,
                 })
 
             if action_list:

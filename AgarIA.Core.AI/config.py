@@ -51,8 +51,8 @@ MINIBATCH_SIZE = 128
 EPOCHS = 4
 
 # Observation
-OBS_SIZE = 825  # 10 self + 3 prev action + 512 food (256 * 2) + 300 players (50 * 6)
-ACTION_SIZE = 3  # moveX, moveY, split
+OBS_SIZE = 821  # 7 self + 2 prev action + 512 food (256 * 2) + 300 players (50 * 6)
+ACTION_SIZE = 2  # targetX, targetY (absolute 0-1)
 
 # Training loop
 TICK_INTERVAL = 0.05  # seconds between state polls (20 TPS)

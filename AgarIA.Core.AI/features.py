@@ -14,7 +14,7 @@ def build_observations(
     """Build observation vectors for all bots from raw game state.
 
     Args:
-        prev_actions: (num_bots, 3) previous actions [moveX, moveY, split], or None for zeros.
+        prev_actions: (num_bots, 2) previous actions [targetX, targetY], or None for zeros.
 
     Returns: (num_bots, OBS_SIZE) float32 array.
     """
@@ -46,12 +46,7 @@ def _build_single(
     bot_mass = bot["mass"]
     bot_speed = bot["speed"] if bot["speed"] > 0.01 else 4.0
 
-    # Find global largest mass
-    largest_mass = max((p["mass"] for p in all_players), default=bot_mass)
-
-    # Self state (10 features)
-    features[idx] = bot_mass / largest_mass if largest_mass > 0 else 1.0
-    idx += 1
+    # Self state (7 features)
     features[idx] = 1.0 / bot_mass
     idx += 1
     features[idx] = 1.0 if bot_mass >= 24 else 0.0  # MinSplitMass
@@ -66,36 +61,35 @@ def _build_single(
     idx += 1
     features[idx] = 1.0 if bot_speed > 4.0 else 0.0  # speed boost
     idx += 1
-    # Second cell (not tracked for simplicity — zero)
-    idx += 2  # dx, dy to second cell
 
-    # Previous action (3 features: moveX, moveY, split)
+    # Previous action (2 features: targetX, targetY)
     if prev_action is not None:
-        features[idx:idx + 3] = prev_action
-    idx += 3
+        features[idx:idx + 2] = prev_action
+    idx += 2
 
-    # Food: top 32 by distance (dx, dy only — no distance feature)
+    # Food: top 256 nearest (absolute x/mapSize, y/mapSize)
     food_dists = []
     for f in food_list:
         dx = f["x"] - bx
         dy = f["y"] - by
         dist_sq = dx * dx + dy * dy
-        food_dists.append((dx, dy, dist_sq))
+        food_dists.append((f["x"], f["y"], dist_sq))
 
     food_dists.sort(key=lambda t: t[2])
 
     for j in range(TOP_FOOD_K):
         if j < len(food_dists):
-            features[idx] = food_dists[j][0] / 800.0
+            features[idx] = food_dists[j][0] / map_size
             idx += 1
-            features[idx] = food_dists[j][1] / 800.0
+            features[idx] = food_dists[j][1] / map_size
             idx += 1
         else:
             idx += 2
 
-    # Players: top 64 by distance (dx, dy, relative mass, vx, vy, edibility)
+    # Players: top 50 nearest (abs x/mapSize, abs y/mapSize, mass ratio, vx, vy, edibility)
     player_dists = []
     eat_size_ratio = 1.15
+    largest_mass = max((p["mass"] for p in all_players), default=bot_mass)
 
     for p in all_players:
         if p["id"] == bot["id"]:
@@ -106,18 +100,19 @@ def _build_single(
         dx = p["x"] - bx
         dy = p["y"] - by
         dist_sq = dx * dx + dy * dy
-        player_dists.append((dx, dy, dist_sq, p["mass"], p))
+        player_dists.append((dist_sq, p))
 
-    player_dists.sort(key=lambda t: t[2])
+    player_dists.sort(key=lambda t: t[0])
 
     eat_threshold = bot_mass / eat_size_ratio
 
     for j in range(TOP_PLAYER_K):
         if j < len(player_dists):
-            dx, dy, _, pmass, p = player_dists[j]
-            features[idx] = dx / 1600.0
+            _, p = player_dists[j]
+            pmass = p["mass"]
+            features[idx] = p["x"] / map_size
             idx += 1
-            features[idx] = dy / 1600.0
+            features[idx] = p["y"] / map_size
             idx += 1
             features[idx] = pmass / largest_mass if largest_mass > 0 else 0.0
             idx += 1
