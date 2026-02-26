@@ -9,6 +9,8 @@ public static class AIServiceCollectionExtensions
     public static IServiceCollection AddAI(this IServiceCollection services)
     {
         services.AutoWireServicesFrom<AIAssembly>();
+        services.AddSingleton<ExternalAiPlayerManager>();
+        services.AddSingleton<IExternalAiPlayerManager>(sp => sp.GetRequiredService<ExternalAiPlayerManager>());
         services.AddSingleton<AIPlayerController>();
         services.AddSingleton<IAIController>(sp => sp.GetRequiredService<AIPlayerController>());
         return services;

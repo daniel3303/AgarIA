@@ -1,0 +1,64 @@
+using AgarIA.Core.AI;
+using Microsoft.AspNetCore.Mvc;
+
+namespace AgarIA.Web.Controllers.Api;
+
+[ApiController]
+[Route("api/ai")]
+public class AiApiController : ControllerBase
+{
+    private readonly IExternalAiPlayerManager _externalAiManager;
+
+    public AiApiController(IExternalAiPlayerManager externalAiManager)
+    {
+        _externalAiManager = externalAiManager;
+    }
+
+    [HttpGet("state")]
+    public IActionResult GetState()
+    {
+        return Ok(_externalAiManager.GetGameState());
+    }
+
+    [HttpGet("config")]
+    public IActionResult GetConfig()
+    {
+        return Ok(_externalAiManager.GetGameConfig());
+    }
+
+    [HttpPost("players")]
+    public IActionResult RegisterPlayers([FromBody] RegisterPlayersRequest request)
+    {
+        if (request.Count < 1 || request.Count > 200)
+            return BadRequest(new { error = "Count must be between 1 and 200" });
+
+        var ids = _externalAiManager.RegisterBots(request.Count);
+        return Ok(new { playerIds = ids });
+    }
+
+    [HttpDelete("players")]
+    public IActionResult RemovePlayers()
+    {
+        _externalAiManager.RemoveAllBots();
+        return Ok(new { message = "All external AI bots removed" });
+    }
+
+    [HttpPost("actions")]
+    public IActionResult PostActions([FromBody] PostActionsRequest request)
+    {
+        if (request.Actions == null || request.Actions.Count == 0)
+            return BadRequest(new { error = "Actions list is required" });
+
+        var actions = request.Actions.Select(a =>
+            new ExternalBotAction(a.PlayerId, a.TargetX, a.TargetY, a.Split)).ToList();
+
+        _externalAiManager.SetActions(actions);
+        return Ok(new { applied = actions.Count });
+    }
+}
+
+public record RegisterPlayersRequest(int Count);
+
+public record PostActionsRequest(List<ActionRequest> Actions);
+
+public record ActionRequest(string PlayerId, double TargetX, double TargetY, bool Split);
