@@ -265,21 +265,7 @@ public class GameEngine : IHostedService, IDisposable
 
                 if (canEat)
                 {
-                    var allowedOverlap = big.Radius * 0.3;
-                    var pushNeeded = overlap - allowedOverlap;
-                    if (pushNeeded > 0)
-                    {
-                        if (small == b)
-                        {
-                            b.X += nx * pushNeeded;
-                            b.Y += ny * pushNeeded;
-                        }
-                        else
-                        {
-                            a.X -= nx * pushNeeded;
-                            a.Y -= ny * pushNeeded;
-                        }
-                    }
+                    // Don't push — let collision system handle the eat
                 }
                 else
                 {
