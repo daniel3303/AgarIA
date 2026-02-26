@@ -343,6 +343,7 @@ const Renderer = (() => {
         const indentMap = getIndentPoints(players);
         for (const p of players) {
             if (p.ghosted) ctx.globalAlpha = 0.1;
+            else if (p.isProtected) ctx.globalAlpha = 0.45;
             const color = COLORS[p.colorIndex] || COLORS[0];
             const seed = idToSeed(p.id);
             const radius = smoothRadius.get(p.id) ?? p.radius;
@@ -410,6 +411,19 @@ const Renderer = (() => {
             ctx.lineWidth = 2;
             ctx.stroke();
 
+            // Pulsing shield ring for spawn-protected players
+            if (p.isProtected) {
+                ctx.globalAlpha = 0.3 + 0.2 * Math.sin(time * 4);
+                ctx.beginPath();
+                ctx.arc(drawX, drawY, radius + 6, 0, Math.PI * 2);
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 3;
+                ctx.setLineDash([8, 6]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.globalAlpha = p.ghosted ? 0.1 : (p.isProtected ? 0.45 : 1);
+            }
+
             // Username label
             const fontSize = Math.max(12, radius * 0.4);
             ctx.font = `bold ${fontSize}px 'Inter', 'Segoe UI', system-ui, sans-serif`;
@@ -421,8 +435,8 @@ const Renderer = (() => {
             ctx.fillStyle = "#1a1a2e";
             ctx.fillText(p.username, drawX, drawY);
 
-            // Bot view indicators (drawn at full alpha even if ghosted)
-            if (p.ghosted) ctx.globalAlpha = 1;
+            // Bot view indicators (drawn at full alpha even if ghosted/protected)
+            if (p.ghosted || p.isProtected) ctx.globalAlpha = 1;
             if (p.isLargest) {
                 // Crown/star indicator above player
                 ctx.font = `${Math.max(16, radius * 0.5)}px sans-serif`;
@@ -439,7 +453,7 @@ const Renderer = (() => {
                 ctx.stroke();
                 ctx.setLineDash([]);
             }
-            if (p.ghosted) ctx.globalAlpha = 1;
+            if (p.ghosted || p.isProtected) ctx.globalAlpha = 1;
         }
     }
 

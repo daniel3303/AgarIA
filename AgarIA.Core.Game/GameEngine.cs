@@ -475,6 +475,7 @@ public class GameEngine : IHostedService, IDisposable
                         ColorIndex = p.ColorIndex,
                         Score = p.Score,
                         Boosting = currentTick < p.SpeedBoostUntil,
+                        IsProtected = currentTick < p.SpawnProtectionUntilTick,
                         OwnerId = p.OwnerId,
                         IsAI = p.IsAI
                     };
