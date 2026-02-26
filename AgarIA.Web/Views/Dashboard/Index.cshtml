@@ -41,19 +41,14 @@
 <h3 class="text-lg font-bold mb-4">Win Rates (Last 100 Games)</h3>
 <div id="winrate-cards" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="stat bg-base-100 shadow rounded-box">
-        <div class="stat-title">Easy</div>
-        <div class="stat-value text-lg" id="wr-easy-pct">—</div>
-        <div class="stat-desc"><span id="wr-easy-wins">0</span> wins</div>
+        <div class="stat-title">AI</div>
+        <div class="stat-value text-lg" id="wr-ai-pct">—</div>
+        <div class="stat-desc"><span id="wr-ai-wins">0</span> wins</div>
     </div>
     <div class="stat bg-base-100 shadow rounded-box">
-        <div class="stat-title">Medium</div>
-        <div class="stat-value text-lg" id="wr-medium-pct">—</div>
-        <div class="stat-desc"><span id="wr-medium-wins">0</span> wins</div>
-    </div>
-    <div class="stat bg-base-100 shadow rounded-box">
-        <div class="stat-title">Hard</div>
-        <div class="stat-value text-lg" id="wr-hard-pct">—</div>
-        <div class="stat-desc"><span id="wr-hard-wins">0</span> wins</div>
+        <div class="stat-title">Heuristic</div>
+        <div class="stat-value text-lg" id="wr-heuristic-pct">—</div>
+        <div class="stat-desc"><span id="wr-heuristic-wins">0</span> wins</div>
     </div>
     <div class="stat bg-base-100 shadow rounded-box">
         <div class="stat-title">Human</div>
@@ -113,9 +108,8 @@
                     document.getElementById('stat-spectators').textContent = d.spectators;
                     // Update win rate cards
                     if (d.winRates) {
-                        updateWinRate('easy', d.winRates.easy);
-                        updateWinRate('medium', d.winRates.medium);
-                        updateWinRate('hard', d.winRates.hard);
+                        updateWinRate('ai', d.winRates.ai);
+                        updateWinRate('heuristic', d.winRates.heuristic);
                         updateWinRate('human', d.winRates.human);
                     }
                 } catch (e) {

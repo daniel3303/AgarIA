@@ -73,7 +73,7 @@ public class DashboardController : AdminBaseController
             .ToListAsync();
 
         var winCounts = new Dictionary<string, int> {
-            ["easy"] = 0, ["medium"] = 0, ["hard"] = 0, ["human"] = 0
+            ["ai"] = 0, ["heuristic"] = 0, ["human"] = 0
         };
         var totalRounds = 0;
 
@@ -100,18 +100,16 @@ public class DashboardController : AdminBaseController
             speedMultiplier = Math.Round(tps / 20.0, 1),
             maxSpeed = _gameSettings.MaxSpeed,
             winRates = new {
-                easy = new { wins = winCounts["easy"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["easy"] / totalRounds, 1) : 0 },
-                medium = new { wins = winCounts["medium"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["medium"] / totalRounds, 1) : 0 },
-                hard = new { wins = winCounts["hard"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["hard"] / totalRounds, 1) : 0 },
+                ai = new { wins = winCounts["ai"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["ai"] / totalRounds, 1) : 0 },
+                heuristic = new { wins = winCounts["heuristic"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["heuristic"] / totalRounds, 1) : 0 },
                 human = new { wins = winCounts["human"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["human"] / totalRounds, 1) : 0 }
             }
         });
     }
 
     private static string ClassifyPlayer(PlayerGameStat player) {
-        if (player.Username != null && player.Username.StartsWith("(E)")) return "easy";
-        if (player.Username != null && player.Username.StartsWith("(M)")) return "medium";
-        if (player.Username != null && player.Username.StartsWith("(H)")) return "hard";
+        if (player.Username != null && player.Username.StartsWith("(AI)")) return "ai";
+        if (player.Username != null && player.Username.StartsWith("Heuristic")) return "heuristic";
         return "human";
     }
 }
