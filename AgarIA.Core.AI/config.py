@@ -36,23 +36,23 @@ def _select_device() -> torch.device:
 DEVICE = _select_device()
 
 # Network architecture
-HIDDEN_SIZES = [1024, 1024, 1024]
+HIDDEN_SIZES = [512, 512, 512]
 
 # PPO hyperparameters
 LEARNING_RATE = 3e-4
 GAMMA = 0.99
 LAMBDA = 0.95
 CLIP_EPSILON = 0.2
-ENTROPY_COEFF = 0.001
+ENTROPY_COEFF = 0.01
 VALUE_COEFF = 0.5
 MAX_GRAD_NORM = 0.5
-STEPS_PER_BOT = 512
+STEPS_PER_BOT = 8192
 MINIBATCH_SIZE = 128
 EPOCHS = 4
 
 # Observation
 OBS_SIZE = 821  # 7 self + 2 prev action + 512 food (256 * 2) + 300 players (50 * 6)
-ACTION_SIZE = 2  # targetX, targetY (absolute 0-1)
+ACTION_SIZE = 2  # relative direction (-1 to 1)
 
 # Training loop
 TICK_INTERVAL = 0.05  # seconds between state polls (20 TPS)

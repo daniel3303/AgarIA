@@ -160,9 +160,20 @@ def main():
                         print(f"Re-registration failed: {e}")
                         continue
 
+            # Build alive mask for this tick
+            alive_mask = np.array(
+                [
+                    1.0 if bid in players_by_id and players_by_id[bid]["isAlive"] else 0.0
+                    for bid in bot_ids
+                ],
+                dtype=np.float32,
+            )
+
             # Build observations (include previous actions for recurrence)
             raw_obs = build_observations(state, bot_ids, prev_actions)
-            obs_normalizer.update(raw_obs)
+            # Only update normalizer with alive bot observations
+            if alive_mask.sum() > 0:
+                obs_normalizer.update(raw_obs[alive_mask > 0])
             obs = obs_normalizer.normalize(raw_obs)
 
             # Compute rewards from mass deltas
@@ -209,14 +220,34 @@ def main():
                 client.post_actions(action_list)
 
             # Store transitions and train (skip when inference-only or all dead)
-            alive_count_now = int((1 - dones).sum())
+            alive_count_now = int(alive_mask.sum())
             if training_enabled and alive_count_now > 0:
-                buffer.add(obs, actions_np, log_probs_np, norm_rewards, values_np, dones)
-                total_steps += len(bot_ids)
+                # Mask dead bots: zero out their data so they don't pollute training
+                masked_obs = obs.copy()
+                masked_actions = actions_np.copy()
+                masked_log_probs = log_probs_np.copy()
+                masked_rewards = norm_rewards.copy()
+                masked_values = values_np.copy()
+                dead_mask = alive_mask < 1.0
+                masked_obs[dead_mask] = 0.0
+                masked_actions[dead_mask] = 0.0
+                masked_log_probs[dead_mask] = 0.0
+                masked_rewards[dead_mask] = 0.0
+                masked_values[dead_mask] = 0.0
+
+                buffer.add(masked_obs, masked_actions, masked_log_probs, masked_rewards, masked_values, dones)
+                total_steps += alive_count_now
 
                 # Train if buffer full
                 if buffer.ready():
-                    stats = ppo_update(model, optimizer, buffer)
+                    # Compute bootstrap values V(s_T) for GAE
+                    with torch.no_grad():
+                        _, bootstrap_values = model.forward(obs_t)
+                        last_values = bootstrap_values.squeeze(-1).cpu().numpy()
+                    # Zero bootstrap for dead bots
+                    last_values[dead_mask] = 0.0
+
+                    stats = ppo_update(model, optimizer, buffer, last_values)
                     train_count += 1
                     avg_reward = rewards.mean()
                     alive_count = int((1 - dones).sum())

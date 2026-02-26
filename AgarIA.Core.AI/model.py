@@ -26,7 +26,7 @@ class ActorCriticNetwork(nn.Module):
         self.value_head = nn.Linear(prev, 1)
 
         # Learnable log-std for continuous actions
-        self.log_std = nn.Parameter(torch.full((ACTION_SIZE,), -1.0))
+        self.log_std = nn.Parameter(torch.full((ACTION_SIZE,), -0.5))
 
         self._init_weights()
 

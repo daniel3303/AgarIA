@@ -58,8 +58,12 @@ class RolloutBuffer:
     def reset(self):
         self.step_count = 0
 
-    def get_training_data(self) -> dict:
-        """Compute GAE per bot, then flatten for minibatch sampling."""
+    def get_training_data(self, last_values: np.ndarray) -> dict:
+        """Compute GAE per bot, then flatten for minibatch sampling.
+
+        Args:
+            last_values: Bootstrap values V(s_T) for each bot, shape (num_bots,).
+        """
         T = self.step_count
         all_advantages = np.zeros((self.num_bots, T), dtype=np.float32)
         all_returns = np.zeros((self.num_bots, T), dtype=np.float32)
@@ -72,7 +76,10 @@ class RolloutBuffer:
             advantages = np.zeros(T, dtype=np.float32)
             last_gae = 0.0
             for t in reversed(range(T)):
-                next_value = 0.0 if t == T - 1 else values[t + 1]
+                if t == T - 1:
+                    next_value = last_values[b]
+                else:
+                    next_value = values[t + 1]
                 next_non_terminal = 1.0 - dones[t]
                 delta = rewards[t] + GAMMA * next_value * next_non_terminal - values[t]
                 advantages[t] = last_gae = delta + GAMMA * LAMBDA * next_non_terminal * last_gae
@@ -96,9 +103,10 @@ def ppo_update(
     model: ActorCriticNetwork,
     optimizer: torch.optim.Optimizer,
     buffer: RolloutBuffer,
+    last_values: np.ndarray,
 ) -> dict:
     """Run PPO update epochs on the buffer. Returns training stats."""
-    data = buffer.get_training_data()
+    data = buffer.get_training_data(last_values)
 
     obs_t = torch.from_numpy(data["obs"]).to(DEVICE)
     actions_t = torch.from_numpy(data["actions"]).to(DEVICE)
