@@ -330,8 +330,8 @@ public class GameEngine : IHostedService, IDisposable
 
                 _hubContext.Clients.Client(prey.OwnerId).Died(new
                 {
-                    killedBy = eater.Username,
-                    finalScore = ownerAlive?.Score ?? 0
+                    KilledBy = eater.Username,
+                    FinalScore = ownerAlive?.Score ?? 0
                 });
             }
             else
@@ -356,8 +356,8 @@ public class GameEngine : IHostedService, IDisposable
                 {
                     _hubContext.Clients.Client(prey.Id).Died(new
                     {
-                        killedBy = eater.Username,
-                        finalScore = prey.Score
+                        KilledBy = eater.Username,
+                        FinalScore = prey.Score
                     });
                 }
             }
@@ -467,16 +467,16 @@ public class GameEngine : IHostedService, IDisposable
                     var p = alivePlayers[i];
                     players[i] = new
                     {
-                        id = p.Id,
-                        x = p.X,
-                        y = p.Y,
-                        radius = p.Radius,
-                        username = p.Username,
-                        colorIndex = p.ColorIndex,
-                        score = p.Score,
-                        boosting = currentTick < p.SpeedBoostUntil,
-                        ownerId = p.OwnerId,
-                        isAI = p.IsAI
+                        Id = p.Id,
+                        X = p.X,
+                        Y = p.Y,
+                        Radius = p.Radius,
+                        Username = p.Username,
+                        ColorIndex = p.ColorIndex,
+                        Score = p.Score,
+                        Boosting = currentTick < p.SpeedBoostUntil,
+                        OwnerId = p.OwnerId,
+                        IsAI = p.IsAI
                     };
                 }
             },
@@ -538,25 +538,25 @@ public class GameEngine : IHostedService, IDisposable
         {
             sharedUpdate = new
             {
-                players,
-                food = fullFood,
-                tick = _gameState.CurrentTick,
-                resetType,
-                resetAtScore,
-                resetTicksRemaining
+                Players = players,
+                Food = fullFood,
+                Tick = _gameState.CurrentTick,
+                ResetType = resetType,
+                ResetAtScore = resetAtScore,
+                ResetTicksRemaining = resetTicksRemaining
             };
         }
         else
         {
             sharedUpdate = new
             {
-                players,
-                addedFood,
-                removedFoodIds,
-                tick = _gameState.CurrentTick,
-                resetType,
-                resetAtScore,
-                resetTicksRemaining
+                Players = players,
+                AddedFood = addedFood,
+                RemovedFoodIds = removedFoodIds,
+                Tick = _gameState.CurrentTick,
+                ResetType = resetType,
+                ResetAtScore = resetAtScore,
+                ResetTicksRemaining = resetTicksRemaining
             };
         }
 
@@ -577,12 +577,12 @@ public class GameEngine : IHostedService, IDisposable
             {
                 _hubContext.Clients.Client(spectatorId).BotViewUpdate(new
                 {
-                    botId,
-                    foodIds = perception.FoodIds,
-                    playerIds = perception.PlayerIds,
-                    largestPlayerId = perception.LargestPlayerId,
-                    foodRadius = perception.FoodRadius,
-                    playerRadius = perception.PlayerRadius
+                    BotId = botId,
+                    FoodIds = perception.FoodIds,
+                    PlayerIds = perception.PlayerIds,
+                    LargestPlayerId = perception.LargestPlayerId,
+                    FoodRadius = perception.FoodRadius,
+                    PlayerRadius = perception.PlayerRadius
                 });
             }
         }
@@ -594,10 +594,10 @@ public class GameEngine : IHostedService, IDisposable
         var leaderboard = allAlive
             .Where(p => p.OwnerId == null)
             .Select(p => new {
-                username = p.Username,
-                score = (int)(p.Mass + allAlive.Where(c => c.OwnerId == p.Id).Sum(c => c.Mass))
+                Username = p.Username,
+                Score = (int)(p.Mass + allAlive.Where(c => c.OwnerId == p.Id).Sum(c => c.Mass))
             })
-            .OrderByDescending(p => p.score)
+            .OrderByDescending(p => p.Score)
             .Take(10)
             .ToList();
 
@@ -666,7 +666,7 @@ public class GameEngine : IHostedService, IDisposable
 
         if (topPlayer != null)
         {
-            _resetScoreHistory.Add(new { username = topPlayer.Username, score = topPlayer.Score });
+            _resetScoreHistory.Add(new { Username = topPlayer.Username, Score = topPlayer.Score });
             if (_resetScoreHistory.Count > 10)
                 _resetScoreHistory.RemoveAt(0);
 
@@ -694,7 +694,7 @@ public class GameEngine : IHostedService, IDisposable
         _heuristicController.OnGameReset();
 
         // Notify all connected human players (alive or on death screen) that the game reset
-        _hubContext.Clients.Group("humans").GameReset(new { message = "Game Reset" });
+        _hubContext.Clients.Group("humans").GameReset(new { Message = "Game Reset" });
 
         foreach (var player in _playerRepository.GetAlive().ToList())
         {

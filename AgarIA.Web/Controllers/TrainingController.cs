@@ -23,15 +23,15 @@ public class TrainingController : AdminBaseController
     public IActionResult Stats() {
         var stats = _externalAiManager.LastTrainingStats;
         return Json(new {
-            trainingEnabled = _externalAiManager.TrainingEnabled,
-            connectedBots = _externalAiManager.ConnectedBotCount,
-            stats = stats == null ? null : new {
-                totalUpdates = stats.TotalUpdates,
-                totalSteps = stats.TotalSteps,
-                avgReward = stats.AvgReward,
-                policyLoss = stats.PolicyLoss,
-                valueLoss = stats.ValueLoss,
-                entropy = stats.Entropy
+            TrainingEnabled = _externalAiManager.TrainingEnabled,
+            ConnectedBots = _externalAiManager.ConnectedBotCount,
+            Stats = stats == null ? null : new {
+                TotalUpdates = stats.TotalUpdates,
+                TotalSteps = stats.TotalSteps,
+                AvgReward = stats.AvgReward,
+                PolicyLoss = stats.PolicyLoss,
+                ValueLoss = stats.ValueLoss,
+                Entropy = stats.Entropy
             }
         });
     }
@@ -39,6 +39,6 @@ public class TrainingController : AdminBaseController
     [HttpPost]
     public IActionResult Toggle(bool enabled) {
         _externalAiManager.SetTrainingMode(enabled);
-        return Json(new { enabled = _externalAiManager.TrainingEnabled });
+        return Json(new { Enabled = _externalAiManager.TrainingEnabled });
     }
 }

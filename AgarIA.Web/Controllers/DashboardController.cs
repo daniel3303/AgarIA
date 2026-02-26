@@ -89,20 +89,20 @@ public class DashboardController : AdminBaseController
         }
 
         return Json(new {
-            currentTick = _gameState.CurrentTick,
-            totalPlayers = alivePlayers.Count,
-            aiPlayers = alivePlayers.Count(p => p.IsAI),
-            humanPlayers = alivePlayers.Count(p => !p.IsAI),
-            foodCount = _foodRepository.GetCount(),
-            topScore = alivePlayers.Any() ? alivePlayers.Max(p => p.Score) : 0,
-            spectators = _gameState.Spectators.Count,
-            ticksPerSecond = tps,
-            speedMultiplier = Math.Round(tps / 20.0, 1),
-            maxSpeed = _gameSettings.MaxSpeed,
-            winRates = new {
-                ai = new { wins = winCounts["ai"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["ai"] / totalRounds, 1) : 0 },
-                heuristic = new { wins = winCounts["heuristic"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["heuristic"] / totalRounds, 1) : 0 },
-                human = new { wins = winCounts["human"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["human"] / totalRounds, 1) : 0 }
+            CurrentTick = _gameState.CurrentTick,
+            TotalPlayers = alivePlayers.Count,
+            AiPlayers = alivePlayers.Count(p => p.IsAI),
+            HumanPlayers = alivePlayers.Count(p => !p.IsAI),
+            FoodCount = _foodRepository.GetCount(),
+            TopScore = alivePlayers.Any() ? alivePlayers.Max(p => p.Score) : 0,
+            Spectators = _gameState.Spectators.Count,
+            TicksPerSecond = tps,
+            SpeedMultiplier = Math.Round(tps / 20.0, 1),
+            MaxSpeed = _gameSettings.MaxSpeed,
+            WinRates = new {
+                Ai = new { Wins = winCounts["ai"], Pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["ai"] / totalRounds, 1) : 0 },
+                Heuristic = new { Wins = winCounts["heuristic"], Pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["heuristic"] / totalRounds, 1) : 0 },
+                Human = new { Wins = winCounts["human"], Pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["human"] / totalRounds, 1) : 0 }
             }
         });
     }

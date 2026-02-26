@@ -30,40 +30,40 @@ public class AiApiController : ControllerBase
     public IActionResult RegisterPlayers([FromBody] RegisterPlayersRequest request)
     {
         if (request.Count < 1 || request.Count > 200)
-            return BadRequest(new { error = "Count must be between 1 and 200" });
+            return BadRequest(new { Error = "Count must be between 1 and 200" });
 
         var ids = _externalAiManager.RegisterBots(request.Count);
-        return Ok(new { playerIds = ids });
+        return Ok(new { PlayerIds = ids });
     }
 
     [HttpDelete("players")]
     public IActionResult RemovePlayers()
     {
         _externalAiManager.RemoveAllBots();
-        return Ok(new { message = "All external AI bots removed" });
+        return Ok(new { Message = "All external AI bots removed" });
     }
 
     [HttpPost("actions")]
     public IActionResult PostActions([FromBody] PostActionsRequest request)
     {
         if (request.Actions == null || request.Actions.Count == 0)
-            return BadRequest(new { error = "Actions list is required" });
+            return BadRequest(new { Error = "Actions list is required" });
 
         var actions = request.Actions.Select(a =>
             new ExternalBotAction(a.PlayerId, a.TargetX, a.TargetY, a.Split)).ToList();
 
         _externalAiManager.SetActions(actions);
-        return Ok(new { applied = actions.Count });
+        return Ok(new { Applied = actions.Count });
     }
     [HttpGet("training")]
     public IActionResult GetTrainingMode() {
-        return Ok(new { enabled = _externalAiManager.TrainingEnabled });
+        return Ok(new { Enabled = _externalAiManager.TrainingEnabled });
     }
 
     [HttpPost("training")]
     public IActionResult SetTrainingMode([FromBody] TrainingModeRequest request) {
         _externalAiManager.SetTrainingMode(request.Enabled);
-        return Ok(new { enabled = _externalAiManager.TrainingEnabled });
+        return Ok(new { Enabled = _externalAiManager.TrainingEnabled });
     }
 
     [HttpPost("stats")]
