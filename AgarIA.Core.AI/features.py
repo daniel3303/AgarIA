@@ -4,8 +4,8 @@ import math
 import numpy as np
 from config import OBS_SIZE
 
-TOP_FOOD_K = 32
-TOP_PLAYER_K = 16
+TOP_FOOD_K = 64
+TOP_PLAYER_K = 32
 
 
 def build_observations(state: dict, bot_ids: list[str]) -> np.ndarray:
