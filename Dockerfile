@@ -14,7 +14,6 @@ COPY AgarIA.slnx ./
 COPY AgarIA.Core.Data/AgarIA.Core.Data.csproj AgarIA.Core.Data/
 COPY AgarIA.Core.Repositories/AgarIA.Core.Repositories.csproj AgarIA.Core.Repositories/
 COPY AgarIA.Core.Game/AgarIA.Core.Game.csproj AgarIA.Core.Game/
-COPY AgarIA.Core.AI/AgarIA.Core.AI.csproj AgarIA.Core.AI/
 COPY AgarIA.Web/AgarIA.Web.csproj AgarIA.Web/
 RUN dotnet restore AgarIA.slnx
 COPY . .

@@ -36,7 +36,7 @@ def _select_device() -> torch.device:
 DEVICE = _select_device()
 
 # Network architecture
-HIDDEN_SIZES = [256, 256]
+HIDDEN_SIZES = [1024, 1024]
 
 # PPO hyperparameters
 LEARNING_RATE = 3e-4
