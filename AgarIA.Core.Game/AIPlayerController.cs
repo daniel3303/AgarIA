@@ -11,6 +11,7 @@ namespace AgarIA.Core.Game;
 public class AIPlayerController : IAIController
 {
     private readonly GameSettings _gameSettings;
+    private readonly PlayerRepository _playerRepository;
     private readonly ILogger<AIPlayerController> _logger;
     public ConcurrentDictionary<string, BotPerception> BotPerceptions { get; } = new();
     private double _aiSeqMs;
@@ -19,10 +20,12 @@ public class AIPlayerController : IAIController
 
     public AIPlayerController(
         GameSettings gameSettings,
+        PlayerRepository playerRepository,
         IExternalAiPlayerManager externalAiManager,
         ILoggerFactory loggerFactory)
     {
         _gameSettings = gameSettings;
+        _playerRepository = playerRepository;
         _externalAiManager = externalAiManager;
         _logger = loggerFactory.CreateLogger<AIPlayerController>();
     }
@@ -41,6 +44,17 @@ public class AIPlayerController : IAIController
         _externalAiManager.ApplyActions();
         _externalAiManager.CleanupTimedOut();
         _aiSeqMs += Stopwatch.GetElapsedTime(ts).TotalMilliseconds;
+
+        // Check if any player exceeded the reset score threshold
+        var resetScore = _gameSettings.ResetAtScore;
+        if (resetScore > 0)
+        {
+            foreach (var p in _playerRepository.GetAlive())
+            {
+                if (p.Score >= resetScore)
+                    return true;
+            }
+        }
 
         return false;
     }
