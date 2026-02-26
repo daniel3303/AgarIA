@@ -157,6 +157,11 @@ public class GameHub : Hub<IGameHub>
         _gameEngine.SetMaxSpeed(enabled);
     }
 
+    public void SetSpeedMultiplier(int multiplier)
+    {
+        _gameEngine.SetSpeedMultiplier(multiplier);
+    }
+
     public void Respawn()
     {
         var existing = _playerRepository.Get(Context.ConnectionId);

@@ -91,11 +91,15 @@
             <div class="card bg-base-100 border border-base-200 mb-3">
                 <div class="card-body p-3">
                     <h3 class="font-semibold text-sm">Simulation</h3>
+                    <fieldset class="fieldset mb-2">
+                        <legend class="fieldset-legend">Speed Multiplier</legend>
+                        <input type="number" asp-for="SpeedMultiplier" class="input input-sm w-full" min="1" max="100" />
+                        <p class="text-xs text-base-content/60 mt-1">Tick rate = 20 × multiplier (e.g. 5 = 100 TPS).</p>
+                    </fieldset>
                     <label class="label cursor-pointer justify-start gap-3">
                         <input type="checkbox" asp-for="MaxSpeed" class="checkbox checkbox-xs" />
-                        <span class="label-text">Max Speed</span>
+                        <span class="label-text">Max Speed (overrides multiplier)</span>
                     </label>
-                    <p class="text-xs text-base-content/60 mt-1">Run without tick delay for faster training.</p>
                 </div>
             </div>
 

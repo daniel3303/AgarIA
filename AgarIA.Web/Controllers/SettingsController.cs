@@ -39,7 +39,7 @@ public class SettingsController : AdminBaseController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Update(
         double resetAtScore, int minResetSeconds, int maxResetSeconds,
-        bool maxSpeed, ResetType resetType,
+        bool maxSpeed, int speedMultiplier, ResetType resetType,
         bool heuristicEnabled, int heuristicPlayerCount, bool heuristicCanEatEachOther) {
 
         _gameSettings.ResetAtScore = Math.Max(100, resetAtScore);
@@ -51,9 +51,12 @@ public class SettingsController : AdminBaseController
         _gameSettings.HeuristicPlayerCount = Math.Clamp(heuristicPlayerCount, 0, 50);
         _gameSettings.HeuristicCanEatEachOther = heuristicCanEatEachOther;
 
+        _gameSettings.SpeedMultiplier = Math.Clamp(speedMultiplier, 1, 100);
+
         // Apply to running game
         _aiController.SetResetAtScore(_gameSettings.ResetAtScore);
         _gameEngine.SetResetSecondsRange(_gameSettings.MinResetSeconds, _gameSettings.MaxResetSeconds);
+        _gameEngine.SetSpeedMultiplier(_gameSettings.SpeedMultiplier);
         _gameEngine.SetMaxSpeed(_gameSettings.MaxSpeed);
 
         // Persist to database

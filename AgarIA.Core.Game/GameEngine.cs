@@ -650,11 +650,24 @@ public class GameEngine : IHostedService, IDisposable
         }
         else
         {
-            // Resume normal timer-based ticking
-            _gameTimer?.Change(0, 1000 / GameConfig.TickRate);
+            // Resume timer-based ticking at current speed multiplier
+            _gameTimer?.Change(0, 1000 / (GameConfig.TickRate * _gameSettings.SpeedMultiplier));
         }
 
         _logger.LogInformation("Max speed {State}", enabled ? "enabled" : "disabled");
+    }
+
+    public void SetSpeedMultiplier(int multiplier)
+    {
+        multiplier = Math.Clamp(multiplier, 1, 100);
+        _gameSettings.SpeedMultiplier = multiplier;
+
+        if (!_maxSpeed)
+        {
+            _gameTimer?.Change(0, 1000 / (GameConfig.TickRate * multiplier));
+        }
+
+        _logger.LogInformation("Speed multiplier set to {Multiplier}x ({Tps} TPS)", multiplier, GameConfig.TickRate * multiplier);
     }
 
     private void PerformReset()

@@ -14,6 +14,7 @@ public static class AdminSettingsService
         ["MaxResetSeconds"] = (s, v) => { if (int.TryParse(v, out var i)) s.MaxResetSeconds = i; },
 
         ["MaxSpeed"] = (s, v) => { if (bool.TryParse(v, out var b)) s.MaxSpeed = b; },
+        ["SpeedMultiplier"] = (s, v) => { if (int.TryParse(v, out var i)) s.SpeedMultiplier = i; },
         ["HeuristicEnabled"] = (s, v) => { if (bool.TryParse(v, out var b)) s.HeuristicEnabled = b; },
         ["HeuristicPlayerCount"] = (s, v) => { if (int.TryParse(v, out var i)) s.HeuristicPlayerCount = i; },
         ["HeuristicCanEatEachOther"] = (s, v) => { if (bool.TryParse(v, out var b)) s.HeuristicCanEatEachOther = b; },
@@ -40,6 +41,7 @@ public static class AdminSettingsService
             ["MaxResetSeconds"] = settings.MaxResetSeconds.ToString(),
 
             ["MaxSpeed"] = settings.MaxSpeed.ToString(),
+            ["SpeedMultiplier"] = settings.SpeedMultiplier.ToString(),
             ["HeuristicEnabled"] = settings.HeuristicEnabled.ToString(),
             ["HeuristicPlayerCount"] = settings.HeuristicPlayerCount.ToString(),
             ["HeuristicCanEatEachOther"] = settings.HeuristicCanEatEachOther.ToString(),

@@ -10,6 +10,8 @@ public class GameSettings
 
     public bool MaxSpeed { get; set; }
 
+    public int SpeedMultiplier { get; set; } = 1;
+
     public ResetType ResetType { get; set; }
 
     public bool HeuristicEnabled { get; set; } = true;
