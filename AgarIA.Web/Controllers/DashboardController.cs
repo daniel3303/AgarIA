@@ -17,7 +17,6 @@ public class DashboardController : AdminBaseController
     private readonly AdminDbContext _db;
     private readonly GameEngine _gameEngine;
     private readonly GameSettings _gameSettings;
-    private readonly IAIController _aiController;
 
     public DashboardController(
         GameState gameState,
@@ -25,15 +24,13 @@ public class DashboardController : AdminBaseController
         FoodRepository foodRepository,
         AdminDbContext db,
         GameEngine gameEngine,
-        GameSettings gameSettings,
-        IAIController aiController) {
+        GameSettings gameSettings) {
         _gameState = gameState;
         _playerRepository = playerRepository;
         _foodRepository = foodRepository;
         _db = db;
         _gameEngine = gameEngine;
         _gameSettings = gameSettings;
-        _aiController = aiController;
     }
 
     public async Task<IActionResult> Index() {
@@ -102,7 +99,6 @@ public class DashboardController : AdminBaseController
             ticksPerSecond = tps,
             speedMultiplier = Math.Round(tps / 20.0, 1),
             maxSpeed = _gameSettings.MaxSpeed,
-            ppoStats = _aiController.GetFitnessStats(),
             winRates = new {
                 easy = new { wins = winCounts["easy"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["easy"] / totalRounds, 1) : 0 },
                 medium = new { wins = winCounts["medium"], pct = totalRounds > 0 ? Math.Round(100.0 * winCounts["medium"] / totalRounds, 1) : 0 },

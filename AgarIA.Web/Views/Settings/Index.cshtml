@@ -8,7 +8,8 @@
             <!-- AI Players card -->
             <div class="card bg-base-100 border border-base-200 mb-3">
                 <div class="card-body p-3">
-                    <h3 class="font-semibold text-sm">AI Players</h3>
+                    <h3 class="font-semibold text-sm">Heuristic AI Players</h3>
+                    <p class="text-xs text-base-content/60 mb-2">Internal heuristic bots managed by the .NET server.</p>
                     <div class="grid grid-cols-2 gap-2">
                         <fieldset class="fieldset">
                             <legend class="fieldset-legend">Min Players</legend>
@@ -25,19 +26,12 @@
             <!-- Heuristic Players card -->
             <div class="card bg-base-100 border border-base-200 mb-3" id="heuristicCard">
                 <div class="card-body p-3">
-                    <h3 class="font-semibold text-sm">Heuristic Players</h3>
+                    <h3 class="font-semibold text-sm">Named Heuristic Players</h3>
                     <label class="label cursor-pointer justify-start gap-3 mb-1">
                         <input type="checkbox" name="heuristicEnabled" value="true" class="checkbox checkbox-xs"
                                @(Model.HeuristicEnabled ? "checked" : "") id="heuristicEnabledCb" />
                         <span class="label-text">Enabled</span>
                     </label>
-                    <div role="alert" class="alert alert-error text-xs py-2 mb-2" id="heuristicWarning"
-                         style="@(Model.HeuristicEnabled ? "display:none" : "")">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        <span>When disabled, PPO bots will not have heuristic opponents to learn from during early training (first 25k transitions use heuristic demonstrations regardless).</span>
-                    </div>
                     <div class="grid grid-cols-2 gap-2">
                         <fieldset class="fieldset">
                             <legend class="fieldset-legend">Count</legend>
@@ -93,81 +87,17 @@
                 </div>
             </div>
 
-            <!-- Neural Network Architecture card -->
+            <!-- Python AI Sidecar info -->
             <div class="card bg-base-100 border border-base-200 mb-3">
                 <div class="card-body p-3">
-                    <h3 class="font-semibold text-sm">Neural Network Architecture</h3>
-                    <p class="text-xs text-base-content/60 mb-2">Hidden layer sizes per tier. Use comma-separated values for multiple layers (e.g. 128,64). Changing architecture deletes the genome file and resets training.</p>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <fieldset class="fieldset" style="@(Model.EasyEnabled ? "" : "opacity:0.5")">
-                            <legend class="fieldset-legend">Easy</legend>
-                            <label class="label cursor-pointer justify-start gap-2 mb-1">
-                                <input type="checkbox" name="easyEnabled" value="true" class="checkbox checkbox-xs" @(Model.EasyEnabled ? "checked" : "") data-tier-toggle="easy" />
-                                <span class="label-text text-xs">Enabled</span>
-                            </label>
-                            <input type="text" name="easyHiddenLayers" class="input input-sm w-full"
-                                   value="@string.Join(",", Model.EasyHiddenLayers)" placeholder="64" />
-                        </fieldset>
-                        <fieldset class="fieldset" style="@(Model.MediumEnabled ? "" : "opacity:0.5")">
-                            <legend class="fieldset-legend">Medium</legend>
-                            <label class="label cursor-pointer justify-start gap-2 mb-1">
-                                <input type="checkbox" name="mediumEnabled" value="true" class="checkbox checkbox-xs" @(Model.MediumEnabled ? "checked" : "") data-tier-toggle="medium" />
-                                <span class="label-text text-xs">Enabled</span>
-                            </label>
-                            <input type="text" name="mediumHiddenLayers" class="input input-sm w-full"
-                                   value="@string.Join(",", Model.MediumHiddenLayers)" placeholder="128" />
-                        </fieldset>
-                        <fieldset class="fieldset" style="@(Model.HardEnabled ? "" : "opacity:0.5")">
-                            <legend class="fieldset-legend">Hard</legend>
-                            <label class="label cursor-pointer justify-start gap-2 mb-1">
-                                <input type="checkbox" name="hardEnabled" value="true" class="checkbox checkbox-xs" @(Model.HardEnabled ? "checked" : "") data-tier-toggle="hard" />
-                                <span class="label-text text-xs">Enabled</span>
-                            </label>
-                            <input type="text" name="hardHiddenLayers" class="input input-sm w-full"
-                                   value="@string.Join(",", Model.HardHiddenLayers)" placeholder="256" />
-                        </fieldset>
-                    </div>
-                </div>
-            </div>
-
-            <!-- PPO Training Hyperparameters card -->
-            <div class="card bg-base-100 border border-base-200 mb-3">
-                <div class="card-body p-3">
-                    <h3 class="font-semibold text-sm">PPO Training</h3>
-                    <p class="text-xs text-base-content/60 mb-2">Hyperparameters for Proximal Policy Optimization. Changes apply to new training runs.</p>
-
-                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        <fieldset class="fieldset">
-                            <legend class="fieldset-legend">Learning Rate</legend>
-                            <input type="text" name="ppoLearningRate" class="input input-sm w-full"
-                                   value="@Model.PPO.LearningRate.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" placeholder="0.0003" />
-                        </fieldset>
-                        <fieldset class="fieldset">
-                            <legend class="fieldset-legend">Clip Epsilon</legend>
-                            <input type="number" name="ppoClipEpsilon" class="input input-sm w-full" step="0.01" min="0.05" max="0.5"
-                                   value="@Model.PPO.ClipEpsilon.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
-                        </fieldset>
-                        <fieldset class="fieldset">
-                            <legend class="fieldset-legend">Buffer Size</legend>
-                            <input type="number" name="ppoBufferSize" class="input input-sm w-full" min="256" step="256"
-                                   value="@Model.PPO.BufferSize" />
-                        </fieldset>
-                        <fieldset class="fieldset">
-                            <legend class="fieldset-legend">Minibatch Size</legend>
-                            <input type="number" name="ppoMinibatchSize" class="input input-sm w-full" min="32" step="32"
-                                   value="@Model.PPO.MinibatchSize" />
-                        </fieldset>
-                        <fieldset class="fieldset">
-                            <legend class="fieldset-legend">Epochs</legend>
-                            <input type="number" name="ppoEpochs" class="input input-sm w-full" min="1" max="20"
-                                   value="@Model.PPO.Epochs" />
-                        </fieldset>
-                        <fieldset class="fieldset">
-                            <legend class="fieldset-legend">Entropy Coeff</legend>
-                            <input type="number" name="ppoEntropyCoeff" class="input input-sm w-full" step="0.001" min="0" max="0.1"
-                                   value="@Model.PPO.EntropyCoeff.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
-                        </fieldset>
+                    <h3 class="font-semibold text-sm">Python AI Sidecar</h3>
+                    <p class="text-xs text-base-content/60 mb-2">AI training is handled by an external Python process via REST API. See <code>python-ai/README.md</code> for setup.</p>
+                    <div class="text-xs font-mono text-base-content/50">
+                        <div>GET /api/ai/state — Game state</div>
+                        <div>GET /api/ai/config — Game constants</div>
+                        <div>POST /api/ai/players — Register bots</div>
+                        <div>DELETE /api/ai/players — Remove bots</div>
+                        <div>POST /api/ai/actions — Send actions</div>
                     </div>
                 </div>
             </div>
@@ -183,7 +113,7 @@
                         <input type="checkbox" asp-for="MaxSpeed" class="checkbox checkbox-xs" />
                         <span class="label-text">Max Speed</span>
                     </label>
-                    <p class="text-xs text-base-content/60 mt-1">Run without tick delay for faster evolution.</p>
+                    <p class="text-xs text-base-content/60 mt-1">Run without tick delay for faster training.</p>
                 </div>
             </div>
 
@@ -222,19 +152,10 @@
         r.addEventListener('change', updateResetFields));
     updateResetFields();
 
-    // Toggle fieldset opacity when tier checkbox changes
-    document.querySelectorAll('[data-tier-toggle]').forEach(cb => {
-        cb.addEventListener('change', () => {
-            cb.closest('fieldset').style.opacity = cb.checked ? '' : '0.5';
-        });
-    });
-
-    // Toggle heuristic card opacity and danger warning based on enabled checkbox
+    // Toggle heuristic card opacity based on enabled checkbox
     const heuristicCb = document.getElementById('heuristicEnabledCb');
-    const heuristicWarning = document.getElementById('heuristicWarning');
     const heuristicCard = document.getElementById('heuristicCard');
     heuristicCb.addEventListener('change', () => {
-        heuristicWarning.style.display = heuristicCb.checked ? 'none' : '';
         heuristicCard.style.opacity = heuristicCb.checked ? '' : '0.7';
     });
     if (!heuristicCb.checked) heuristicCard.style.opacity = '0.7';
