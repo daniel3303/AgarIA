@@ -12,6 +12,7 @@ services:
       - game
     environment:
       - API_URL=http://game:8095
+      - PYTHONUNBUFFERED=1
     volumes:
       - ai-models:/app/models
     # For NVIDIA GPU: uncomment deploy section
