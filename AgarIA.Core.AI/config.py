@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 API_URL = os.environ.get("API_URL", "http://localhost:5000")
 
 # Bot management
-NUM_BOTS = 50
+NUM_BOTS = 1
 
 # Model persistence
 MODEL_DIR = os.environ.get("MODEL_DIR", ".")
@@ -46,8 +46,8 @@ CLIP_EPSILON = 0.2
 ENTROPY_COEFF = 0.001
 VALUE_COEFF = 0.5
 MAX_GRAD_NORM = 0.5
-STEPS_PER_BOT = 64
-MINIBATCH_SIZE = 256
+STEPS_PER_BOT = 512
+MINIBATCH_SIZE = 128
 EPOCHS = 4
 
 # Observation
