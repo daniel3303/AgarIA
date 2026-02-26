@@ -90,6 +90,7 @@ def main():
 
     prev_masses: dict[str, float] = {bid: start_mass for bid in bot_ids}
     prev_actions = np.zeros((num_bots, config.ACTION_SIZE), dtype=np.float32)
+    prev_tick = 0
     last_save = time.time()
     train_count = 0
     training_enabled = True
@@ -112,17 +113,32 @@ def main():
 
             # Get state
             state = client.get_state()
+            current_tick = state.get("tick", 0)
+
+            # Detect game reset (tick went backwards)
+            if current_tick < prev_tick:
+                print(f"Game reset detected (tick {prev_tick} -> {current_tick}), re-registering...")
+                try:
+                    client.remove_bots()
+                    bot_ids = client.register_bots(num_bots)
+                    prev_masses = {bid: start_mass for bid in bot_ids}
+                    prev_actions = np.zeros((num_bots, config.ACTION_SIZE), dtype=np.float32)
+                    print(f"Re-registered after reset: {bot_ids}")
+                except Exception as e:
+                    print(f"Re-registration after reset failed: {e}")
+                prev_tick = current_tick
+                continue
+            prev_tick = current_tick
 
             # Check if bots are alive, re-register dead ones
             players_by_id = {p["id"]: p for p in state["players"]}
             alive_bots = [bid for bid in bot_ids if bid in players_by_id and players_by_id[bid]["isAlive"]]
 
             if len(alive_bots) < num_bots:
-                # Many bots died (probably game reset), re-register
                 dead_count = len(bot_ids) - len(alive_bots)
                 if dead_count > 0:
                     try:
-                        print(f"Re-registering {dead_count} dead bots...")
+                        print(f"Re-registering {dead_count} dead bots (killed in game)...")
                         new_ids = client.register_bots(dead_count)
                         print(f"Re-registered: {new_ids}")
                         # Replace dead bot IDs
@@ -173,14 +189,15 @@ def main():
             values_np = values.cpu().numpy()
             prev_actions = actions_np.copy()
 
-            # Send actions to game (absolute 0-1 mapped to map coordinates)
+            # Send actions to game (relative offset scaled by 200, clamped to map)
             map_size = game_config["mapSize"]
             action_list = []
             for i, bid in enumerate(bot_ids):
                 if bid not in players_by_id or not players_by_id[bid]["isAlive"]:
                     continue
-                target_x = float(actions_np[i, 0]) * map_size
-                target_y = float(actions_np[i, 1]) * map_size
+                p = players_by_id[bid]
+                target_x = max(0.0, min(float(map_size), p["x"] + float(actions_np[i, 0]) * 200))
+                target_y = max(0.0, min(float(map_size), p["y"] + float(actions_np[i, 1]) * 200))
                 action_list.append({
                     "playerId": bid,
                     "targetX": target_x,

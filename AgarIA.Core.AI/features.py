@@ -67,13 +67,13 @@ def _build_single(
         features[idx:idx + 2] = prev_action
     idx += 2
 
-    # Food: top 256 nearest (absolute x/mapSize, y/mapSize)
+    # Food: top 256 nearest (relative dx/mapSize, dy/mapSize)
     food_dists = []
     for f in food_list:
         dx = f["x"] - bx
         dy = f["y"] - by
         dist_sq = dx * dx + dy * dy
-        food_dists.append((f["x"], f["y"], dist_sq))
+        food_dists.append((dx, dy, dist_sq))
 
     food_dists.sort(key=lambda t: t[2])
 
@@ -86,7 +86,7 @@ def _build_single(
         else:
             idx += 2
 
-    # Players: top 50 nearest (abs x/mapSize, abs y/mapSize, mass ratio, vx, vy, edibility)
+    # Players: top 50 nearest (relative dx/mapSize, dy/mapSize, mass ratio, vx, vy, edibility)
     player_dists = []
     eat_size_ratio = 1.15
     largest_mass = max((p["mass"] for p in all_players), default=bot_mass)
@@ -110,9 +110,9 @@ def _build_single(
         if j < len(player_dists):
             _, p = player_dists[j]
             pmass = p["mass"]
-            features[idx] = p["x"] / map_size
+            features[idx] = (p["x"] - bx) / map_size
             idx += 1
-            features[idx] = p["y"] / map_size
+            features[idx] = (p["y"] - by) / map_size
             idx += 1
             features[idx] = pmass / largest_mass if largest_mass > 0 else 0.0
             idx += 1

@@ -19,7 +19,7 @@ class ActorCriticNetwork(nn.Module):
             prev = hs
         self.shared = nn.Sequential(*layers)
 
-        # Policy head: targetX mean, targetY mean (absolute 0-1)
+        # Policy head: direction mean (relative -1 to 1 via tanh)
         self.policy_head = nn.Linear(prev, ACTION_SIZE)
 
         # Value head
@@ -50,14 +50,14 @@ class ActorCriticNetwork(nn.Module):
     def get_action(self, obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Sample actions and return (actions, log_probs, values).
 
-        actions: [B, 2] — targetX, targetY (absolute 0-1 via sigmoid)
+        actions: [B, 2] — relative direction (-1 to 1 via tanh)
         """
         policy, value = self.forward(obs)
 
-        mean = torch.sigmoid(policy)
+        mean = torch.tanh(policy)
         std = torch.exp(self.log_std.clamp(-3.0, 0.5))
         dist = torch.distributions.Normal(mean, std)
-        sample = dist.sample().clamp(0.0, 1.0)
+        sample = dist.sample()
         log_probs = dist.log_prob(sample).sum(dim=-1)
 
         return sample, log_probs, value.squeeze(-1)
@@ -68,7 +68,7 @@ class ActorCriticNetwork(nn.Module):
         """Evaluate log_prob, value, entropy for given obs and actions."""
         policy, value = self.forward(obs)
 
-        mean = torch.sigmoid(policy)
+        mean = torch.tanh(policy)
         std = torch.exp(self.log_std.clamp(-3.0, 0.5))
         dist = torch.distributions.Normal(mean, std)
         log_probs = dist.log_prob(actions).sum(dim=-1)
