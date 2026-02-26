@@ -1,6 +1,6 @@
 # Agar.IA
 
-An agar.io-style multiplayer cell arena game where AI players learn via PPO (Proximal Policy Optimization) reinforcement learning. Built with .NET 10, SignalR, and vanilla JavaScript with HTML5 Canvas.
+An agar.io-style multiplayer cell arena game with AI players trained via PPO (Proximal Policy Optimization) reinforcement learning. The game server is built with .NET 10, SignalR, and vanilla JavaScript with HTML5 Canvas. AI training runs as a separate Python sidecar process using PyTorch.
 
 ![Gameplay](docs/screenshots/gameplay.png)
 
@@ -10,6 +10,8 @@ An agar.io-style multiplayer cell arena game where AI players learn via PPO (Pro
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Node.js](https://nodejs.org/) (for building frontend assets)
+- [Python 3.10+](https://www.python.org/) (for AI training)
+- [PyTorch](https://pytorch.org/) (CPU or GPU)
 
 ### Install & Run
 
@@ -24,12 +26,24 @@ npm install
 npm run build
 cd ..
 
-# Build and run
+# Build and run the game server
 dotnet build AgarIA.slnx
 dotnet run --project AgarIA.Web
 ```
 
 The server starts on a local port (shown in the terminal). Open the URL in your browser to play.
+
+### Start AI Training (Optional)
+
+```bash
+cd AgarIA.Core.AI/python-ai
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python train.py
+```
+
+The Python AI sidecar connects to the game server via REST API, registers bots, and trains them using PPO. See `AgarIA.Core.AI/python-ai/README.md` for details.
 
 ### Docker
 
@@ -39,15 +53,33 @@ Pull the pre-built image from Docker Hub:
 docker run -p 5274:5274 -v agaria-data:/app/data daniel3303/agaria:latest
 ```
 
-The volume mounts to `/app/data`, persisting the SQLite database (`admin.db`) and PPO policy files (`ppo_policy_*.json`) across container restarts.
+The volume mounts to `/app/data`, persisting the SQLite database (`admin.db`) across container restarts.
 
 Open `http://localhost:5274` in your browser.
+
+### Docker Compose (Game + AI Training)
+
+Run both the game server and the Python AI sidecar together:
+
+```bash
+docker compose up --build
+```
+
+This starts two services:
+- **game** — .NET game server on port 5274
+- **ai** — Python AI sidecar connecting to the game server, training via PPO
+
+The AI model is persisted in a Docker volume (`ai-models`). To enable NVIDIA GPU acceleration, uncomment the `deploy` section in `docker-compose.yml`.
+
+```bash
+docker compose down   # Stop both services
+```
 
 ## How to Play
 
 ![Join Screen](docs/screenshots/join-screen.png)
 
-Enter a username and click **PLAY** to join, or **SPECTATE** to watch the AI bots evolve.
+Enter a username and click **PLAY** to join, or **SPECTATE** to watch the AI bots.
 
 ### Controls
 
@@ -70,99 +102,100 @@ Enter a username and click **PLAY** to join, or **SPECTATE** to watch the AI bot
 
 ![Spectate Mode](docs/screenshots/spectate-mode.png)
 
-In spectate mode you can observe the AI bots competing and evolving in real time.
+In spectate mode you can observe the AI bots competing in real time.
 
 - **WASD / Arrow keys** — Pan the camera
 - **Mouse wheel** — Zoom in/out
 - **Countdown timer HUD** — Shows time remaining (MaxTime reset) or score threshold (MaxScore reset)
-- **Reset at score** — Automatically reset the game when any player reaches a score threshold (forces new generations)
-- **Max Speed** — Run the simulation without tick delay for faster evolution
+- **Reset at score** — Automatically reset the game when any player reaches a score threshold
+- **Max Speed** — Run the simulation without tick delay for faster training
+
 ## Admin Dashboard
 
 ![Admin Dashboard](docs/screenshots/admin-dashboard.png)
 
 The project includes a password-protected admin panel at `/admin/` for monitoring the simulation, adjusting game settings, and viewing round history. Default credentials: **admin** / **admin**.
 
-## AI Architecture
+## Architecture
 
-### Actor-Critic Network
-
-Each tier shares a single ActorCriticNetwork — all bots of that tier use the same policy weights. The network has configurable shared hidden layers branching into two heads:
-
-- **Easy** `(E)` — default: 1×64 hidden neurons
-- **Medium** `(M)` — default: 1×128 hidden neurons
-- **Hard** `(H)` — default: 2×128 hidden neurons
+### System Overview
 
 ```
-Easy:   151 inputs → [64] hidden (tanh) → policy head (3) + value head (1)
-Medium: 151 inputs → [128] hidden (tanh) → policy head (3) + value head (1)
-Hard:   151 inputs → [128, 128] hidden (tanh) → policy head (3) + value head (1)
+┌──────────────────────┐       REST API        ┌─────────────────────┐
+│  .NET Game Server     │ ◄──────────────────► │  Python AI Sidecar   │
+│                       │                       │                      │
+│  GameEngine (20 TPS)  │ GET  /api/ai/state    │  PyTorch + PPO       │
+│  Heuristic bots (.NET)│ POST /api/ai/players  │  Builds own features │
+│  API bot lifecycle    │ POST /api/ai/actions   │  Batched inference   │
+│                       │ DEL  /api/ai/players   │  GPU training        │
+└──────────────────────┘                       └─────────────────────┘
 ```
 
-The hidden layer architecture for each tier is configurable from the admin Settings page (e.g. "128,64" for two hidden layers). Changing a tier's architecture deletes its policy file and resets training.
+The .NET server runs the game loop, physics, and collisions. AI training is handled by an external Python process that communicates via REST API. This separation allows:
+- GPU-accelerated training with PyTorch
+- Independent iteration on AI architecture without recompiling .NET
+- Full flexibility over feature engineering and reward functions
 
-#### Input Features (151)
+### .NET Game Server
+
+Heuristic bots run inside .NET, providing baseline opponents. The server exposes REST endpoints for external AI control:
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/api/ai/state` | Full game state (players, food, tick) |
+| GET | `/api/ai/config` | Game constants (map size, speeds, etc.) |
+| POST | `/api/ai/players` | Register bots: `{"count": N}` |
+| DELETE | `/api/ai/players` | Remove all API-managed bots |
+| POST | `/api/ai/actions` | Batch actions: `{"actions": [...]}` |
+
+External bots auto-timeout after 30 seconds without actions.
+
+### Python AI Sidecar
+
+The Python process (`AgarIA.Core.AI/python-ai/`) handles all AI training:
+
+1. Registers bots via REST API
+2. Polls game state each tick
+3. Builds 170-feature observation vectors
+4. Runs batched inference through a PyTorch actor-critic network
+5. Posts actions back to the game server
+6. Collects rewards (mass deltas) and trains via PPO
+
+#### Observation Features (170)
 
 | Feature Group | Count | Description |
 |---------------|-------|-------------|
-| Self info | 7 | Mass relative to largest, absolute mass (1/mass), can-split flag, two largest cells' positions |
-| Nearest food | 64 | 32 closest food items (dx, dy each) |
-| Nearest players | 80 | 16 closest players (dx, dy, relative mass, vx, vy each) |
+| Self info | 10 | Mass ratio, inv mass, can-split, posX/Y, vx/vy, speed boost, split cell relX/relY |
+| Nearest food | 64 | 32 closest food (dx, dy) — sorted by distance |
+| Nearest players | 96 | 16 most relevant players (dx, dy, relative mass, vx, vy, edibility) — sorted by threat score |
 
 #### Action Space
 
 | Output | Type | Description |
 |--------|------|-------------|
-| moveX, moveY | Continuous (Gaussian) | Movement direction mean (tanh of raw output). Two learnable LogStd parameters control exploration noise |
-| split | Discrete (Bernoulli) | Split probability via sigmoid of logit |
+| moveX, moveY | Continuous (Gaussian) | Movement direction with learnable std |
+| split | Discrete (Bernoulli) | Split probability via sigmoid |
 
-### PPO Training
+#### PPO Training
 
-Each tier has its own PPOTrainer that collects per-tick transitions and trains via Proximal Policy Optimization. Training uses **async double-buffering** — when a tier's buffer is full, the network is cloned and training runs in a background task while bots continue using the previous weights. When training completes, the new weights are atomically swapped in. This eliminates tick stalls during training passes.
+- **Buffer**: Collects transitions until `BUFFER_SIZE` (default 2048), then trains
+- **GAE-λ advantages**: γ=0.99, λ=0.95
+- **Clipped surrogate**: ε=0.2, K=4 epochs, minibatch=256
+- **Adam optimizer**: LR=3×10⁻⁴, gradient clipping at 0.5
+- **Normalization**: Running mean/variance for observations, running std for rewards
+- **Model saves**: Auto-saves to `ppo_model.pt` every 60 seconds
 
-1. **Transition collection**: Every tick, each bot's state, sampled action, reward, value estimate, and log probability are stored in the tier's trajectory buffer
-2. **Training trigger**: When the buffer reaches `BufferSize` (default 2048) transitions and no training is in-flight, the network is cloned and a background training task launches
-3. **Double-buffered inference**: While training runs in the background, bots keep using the previous network weights for inference. New transitions accumulate for the next training pass
-4. **Weight swap**: When the background task completes, trained weights are copied back to the live network via `SetParameters`
-5. **GAE-λ advantages**: Generalized Advantage Estimation with γ=0.99, λ=0.95 computes per-step advantages, then normalizes to zero mean / unit std
-6. **Clipped surrogate updates**: For K epochs (default 4), shuffle buffer into minibatches (default 256), compute ratio of new/old policy probability, apply clipped surrogate loss with ε=0.2. PPO's importance sampling naturally handles the slight off-policy drift from transitions collected during background training
-7. **Adam optimizer**: Updates all network parameters (shared layers + policy head + value head + LogStd) with gradient clipping (max norm 0.5)
-
-#### Per-Tick Reward Function
+#### Per-Tick Reward
 
 | Component | Value | Description |
 |-----------|-------|-------------|
-| **Food eaten** | +1.0 per food | Delta of food eaten this tick |
-| **Player kills** | +2.0 per kill | Delta of players killed (Easy tier: 0 — food-only reward) |
-| **Survival** | +0.01 | Small per-tick bonus for staying alive |
-| **Exploration** | +0.05 | Bonus for entering a new grid cell (4×4 grid = 16 cells) |
-| **Death** | −5.0 | Terminal penalty on bot death |
-
-#### Hyperparameters
-
-All configurable from the admin Settings page:
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| BufferSize | 2048 | Transitions collected before training |
-| MinibatchSize | 256 | Samples per gradient update |
-| Epochs | 4 | Passes over buffer per training cycle |
-| Learning Rate | 3×10⁻⁴ | Adam optimizer step size |
-| Clip Epsilon | 0.2 | PPO clipping range |
-| Entropy Coeff | 0.01 | Entropy bonus weight (encourages exploration) |
-| γ (Gamma) | 0.99 | Discount factor |
-| λ (Lambda) | 0.95 | GAE trace decay |
-| Value Coeff | 0.5 | Value loss weight |
-| Max Grad Norm | 0.5 | Gradient clipping threshold |
-
-### Policy Persistence
-
-PPO policy weights + Adam optimizer state auto-save to `ppo_policy_easy.json`, `ppo_policy_medium.json`, and `ppo_policy_hard.json` every 60 seconds. Each tier has its own file. These persist across server restarts, allowing training to continue across sessions. Delete them to start fresh.
+| **Mass delta** | (currentMass − prevMass) / StartMass | Main reward signal |
+| **Death** | −player mass / StartMass | Terminal penalty |
 
 ## Tech Stack
 
 - **Backend**: .NET 10 (ASP.NET Core)
 - **Real-time**: SignalR WebSockets
 - **Frontend**: Vanilla JavaScript, HTML5 Canvas
-- **AI**: Custom actor-critic neural network + PPO reinforcement learning (no ML frameworks)
+- **AI Training**: Python, PyTorch, PPO reinforcement learning
 - **Admin UI**: Tailwind CSS v4, DaisyUI v5, Vite
