@@ -22,11 +22,11 @@ public class GameSettings
 
     public bool HardEnabled { get; set; } = true;
 
-    public List<int> EasyHiddenLayers { get; set; } = [64];
+    public List<int> EasyHiddenLayers { get; set; } = [512];
 
-    public List<int> MediumHiddenLayers { get; set; } = [128];
+    public List<int> MediumHiddenLayers { get; set; } = [1024];
 
-    public List<int> HardHiddenLayers { get; set; } = [256, 256];
+    public List<int> HardHiddenLayers { get; set; } = [1024, 1024];
 
     public bool HeuristicEnabled { get; set; } = true;
 
