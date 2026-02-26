@@ -117,7 +117,7 @@ def main():
             players_by_id = {p["id"]: p for p in state["players"]}
             alive_bots = [bid for bid in bot_ids if bid in players_by_id and players_by_id[bid]["isAlive"]]
 
-            if len(alive_bots) < len(bot_ids) // 2:
+            if len(alive_bots) < num_bots:
                 # Many bots died (probably game reset), re-register
                 dead_count = len(bot_ids) - len(alive_bots)
                 if dead_count > 0:

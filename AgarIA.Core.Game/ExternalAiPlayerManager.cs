@@ -16,10 +16,10 @@ public class ExternalAiPlayerManager : IExternalAiPlayerManager
     private readonly ILogger<ExternalAiPlayerManager> _logger;
     private readonly Random _random = new();
 
-    private readonly ConcurrentDictionary<string, long> _externalBots = new();
+    private readonly ConcurrentDictionary<string, DateTime> _externalBots = new();
     private readonly ConcurrentDictionary<string, ExternalBotAction> _pendingActions = new();
 
-    private const int TimeoutTicks = 30 * GameConfig.TickRate; // 30 seconds
+    private static readonly TimeSpan BotTimeout = TimeSpan.FromSeconds(30);
 
     public bool TrainingEnabled { get; private set; } = true;
     public TrainingStats LastTrainingStats { get; private set; }
@@ -63,7 +63,7 @@ public class ExternalAiPlayerManager : IExternalAiPlayerManager
                 ColorIndex = _random.Next(6)
             };
             _playerRepository.Add(player);
-            _externalBots[id] = _gameState.CurrentTick;
+            _externalBots[id] = DateTime.UtcNow;
             ids.Add(id);
         }
         _logger.LogInformation("Registered {Count} external AI bots", count);
@@ -86,7 +86,7 @@ public class ExternalAiPlayerManager : IExternalAiPlayerManager
             if (_externalBots.ContainsKey(action.PlayerId))
             {
                 _pendingActions[action.PlayerId] = action;
-                _externalBots[action.PlayerId] = _gameState.CurrentTick;
+                _externalBots[action.PlayerId] = DateTime.UtcNow;
             }
         }
     }
@@ -118,10 +118,10 @@ public class ExternalAiPlayerManager : IExternalAiPlayerManager
 
     public void CleanupTimedOut()
     {
-        var currentTick = _gameState.CurrentTick;
+        var now = DateTime.UtcNow;
         foreach (var (id, lastAction) in _externalBots)
         {
-            if (currentTick - lastAction > TimeoutTicks)
+            if (now - lastAction > BotTimeout)
             {
                 _logger.LogInformation("External bot {Id} timed out, removing", id);
                 RemoveBot(id);
