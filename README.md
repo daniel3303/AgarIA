@@ -206,3 +206,11 @@ The Python process (`AgarIA.Core.AI/`) handles all AI training:
 - **Frontend**: Vanilla JavaScript, HTML5 Canvas
 - **AI Training**: Python, PyTorch, PPO reinforcement learning
 - **Admin UI**: Tailwind CSS v4, DaisyUI v5, Vite
+
+## Author
+
+Daniel Oliveira
+
+[![Website](https://img.shields.io/badge/Website-FF6B6B?style=for-the-badge&logo=safari&logoColor=white)](https://danielapoliveira.com/)
+[![X](https://img.shields.io/badge/X-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/daniel_not_nerd)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/daniel-ap-oliveira/)
