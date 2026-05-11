@@ -10,3 +10,7 @@ admin.db-shm
 admin.db-wal
 package-lock.json
 
+
+# Python
+__pycache__/
+*.pyc
